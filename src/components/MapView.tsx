@@ -1,0 +1,93 @@
+"use client";
+import "leaflet/dist/leaflet.css";
+import { useEffect, useMemo } from "react";
+import { CircleMarker, MapContainer, Polyline, Popup, TileLayer, Tooltip, useMap } from "react-leaflet";
+import L from "leaflet";
+import { greatCircle, countryName } from "@/lib/geo";
+import { MODE_META, fmtDate, fmtKm, tripLabel } from "@/lib/format";
+import type { PlaceTotal } from "@/lib/stays";
+import type { Trip } from "@/lib/types";
+
+interface Props {
+  trips: Trip[];
+  cities: PlaceTotal[];
+  selectedId: number | null;
+  onSelect: (t: Trip) => void;
+}
+
+function linePoints(t: Trip): [number, number][] {
+  if (t.mode === "flight") return greatCircle(t.origin.lat, t.origin.lon, t.dest.lat, t.dest.lon);
+  // Ground trips: straight segment, longitude unwrapped for the rare date-line crossing.
+  let lon2 = t.dest.lon;
+  if (lon2 - t.origin.lon > 180) lon2 -= 360;
+  if (lon2 - t.origin.lon < -180) lon2 += 360;
+  return [[t.origin.lat, t.origin.lon], [t.dest.lat, lon2]];
+}
+
+function FitBounds({ trips, cities }: { trips: Trip[]; cities: PlaceTotal[] }) {
+  const map = useMap();
+  const key = trips.map((t) => t.id).join(",") + "|" + cities.length;
+  useEffect(() => {
+    const pts: [number, number][] = trips.flatMap((t) => [[t.origin.lat, t.origin.lon], [t.dest.lat, t.dest.lon]] as [number, number][]);
+    cities.forEach((c) => pts.push([c.lat, c.lon]));
+    if (pts.length) map.fitBounds(L.latLngBounds(pts).pad(0.2), { maxZoom: 6, animate: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, map]);
+  return null;
+}
+
+export default function MapView({ trips, cities, selectedId, onSelect }: Props) {
+  const lines = useMemo(() => trips.map((t) => ({ t, pts: linePoints(t) })), [trips]);
+  const maxNights = Math.max(1, ...cities.map((c) => c.nights));
+
+  return (
+    <MapContainer
+      center={[25, 0]}
+      zoom={2}
+      minZoom={2}
+      worldCopyJump
+      zoomControl={false}
+      className="h-full w-full"
+      attributionControl
+    >
+      <TileLayer
+        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>'
+        subdomains="abcd"
+      />
+      <FitBounds trips={trips} cities={cities} />
+      {lines.map(({ t, pts }) => {
+        const m = MODE_META[t.mode];
+        const sel = t.id === selectedId;
+        return (
+          <Polyline
+            key={t.id}
+            positions={pts}
+            pathOptions={{ color: m.color, weight: sel ? 4 : 2, opacity: selectedId && !sel ? 0.25 : 0.85, dashArray: m.dash }}
+            eventHandlers={{ click: () => onSelect(t) }}
+          >
+            <Tooltip sticky>
+              {m.icon} {tripLabel(t)} · {fmtDate(t.departDate)} · {fmtKm(t.distanceKm)}
+            </Tooltip>
+          </Polyline>
+        );
+      })}
+      {cities.map((c) => (
+        <CircleMarker
+          key={c.key}
+          center={[c.lat, c.lon]}
+          radius={3 + 9 * Math.sqrt(c.nights / maxNights)}
+          pathOptions={{ color: "#e8ecf3", weight: 1, fillColor: "#4f8cff", fillOpacity: 0.55 }}
+        >
+          <Popup>
+            <div className="font-semibold">{c.label}</div>
+            <div className="text-muted">{countryName(c.country)}</div>
+            <div className="mt-1">
+              {c.nights} nights · {c.days} days
+            </div>
+          </Popup>
+        </CircleMarker>
+      ))}
+    </MapContainer>
+  );
+}

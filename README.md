@@ -1,0 +1,105 @@
+# Trip Recap
+
+A self-hosted, Flighty-style travel log. It tracks flights plus trains, drives, buses
+and ferries, and it counts **how many days and nights you spent in every country and city**.
+
+- 🗺️ **Map** of every trip: great-circle arcs for flights, dashed lines for trains and
+  dotted lines for drives. City dots are sized by the nights you spent there.
+- ➕ **Add trips by hand.** Airport search runs on a built-in IATA database (~7,900 airports).
+  Train, drive, bus and ferry stops are searched on OpenStreetMap.
+- 📅 **Days per country and city**, filterable by year. It also shows a list of your stays and a
+  Schengen 90/180 counter.
+- 🌙 **Nightly iPhone check-in.** A Shortcuts automation posts your location every
+  night, which fills the gaps between trips. See [docs/IPHONE_SHORTCUT.md](docs/IPHONE_SHORTCUT.md).
+- 📧 **Gmail import.** It reads airline and rail booking emails through their schema.org markup.
+  It can also use Claude for emails that don't have that markup.
+- 📊 **Stats**: distance, time in the air, airports, airlines, top routes.
+- 📱 Installable on your home screen (PWA), with a dark map UI.
+
+## How days are counted
+
+Your location only changes when something happens: a trip departs, a trip arrives, or a check-in comes in.
+
+| | Meaning |
+|---|---|
+| **Night** | Where you were at the end of the day. A red-eye or multi-day drive still underway at midnight counts as *in transit* and goes to no place. |
+| **Day** | Every place you were in during that day. A travel day counts for **both** ends. This is how most residency and Schengen rules count days. |
+
+Check-ins win over trips. Planned (future) trips show in the list but don't count until they happen.
+The logic is in `src/lib/stays.ts`, with tests in `test/stays.test.ts`.
+
+## Why not Google Maps?
+
+You don't need it. The map is Leaflet with free CARTO/OpenStreetMap tiles.
+Place search and reverse geocoding use OpenStreetMap Nominatim, and airports come from a bundled
+dataset. So there's no API key, no billing account and no quota to manage.
+
+## Running it
+
+```bash
+cp .env.example .env.local     # set APP_TOKEN at minimum
+npm install
+npm run dev                    # http://localhost:3000
+npm test                       # day-counting tests
+```
+
+Data lives in SQLite at `$DATA_DIR/trip-recap.db` (default `./data`).
+
+### Deploy
+
+Use any host with a persistent disk: Fly.io, Railway, Render with a disk, a VPS, or a home server.
+**Vercel's serverless filesystem won't keep the SQLite file.**
+
+```bash
+docker build -t trip-recap .
+docker run -d -p 3000:3000 -v trip-data:/data \
+  -e APP_TOKEN=... -e APP_URL=https://trips.example.com trip-recap
+```
+
+The iPhone Shortcut needs to reach the app over HTTPS from the internet. A cheap VPS
+with Caddy works. So does a home server behind Tailscale Funnel or a Cloudflare Tunnel.
+
+## Gmail import setup
+
+1. In [Google Cloud Console](https://console.cloud.google.com/), create a project and **enable the Gmail API**.
+2. **OAuth consent screen**: choose *External*, add yourself as a test user, and add the scope `gmail.readonly`.
+3. **Credentials → Create OAuth client ID → Web application**. Add the redirect URI
+   `https://YOUR-APP/api/gmail/callback`.
+4. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `APP_URL`, then restart.
+5. In the app, go to **Settings → Connect Gmail → Sync now**.
+
+How emails are parsed:
+1. It searches for itinerary, confirmation, boarding-pass and e-ticket subjects, in English and Spanish.
+2. It reads schema.org `FlightReservation` / `TrainReservation` / `BusReservation` markup. Most
+   airlines and OTAs include it, since it powers Gmail's own trip cards. This step is free and exact.
+3. If an email has no markup and `ANTHROPIC_API_KEY` is set, Claude extracts the legs. It skips
+   marketing emails and cancellations.
+4. Trips are de-duplicated by mode + number + date + route, so booking, check-in and boarding-pass
+   emails for the same flight produce one trip. Each email is processed only once.
+
+To sync automatically, have a cron job call it:
+```bash
+curl -X POST -H "Authorization: Bearer $APP_TOKEN" https://YOUR-APP/api/gmail/sync
+```
+(Or add that as a second step in the nightly Shortcut.)
+
+## API
+
+All endpoints need the `tr_token` cookie or `Authorization: Bearer $APP_TOKEN`.
+
+| Method | Path | |
+|---|---|---|
+| GET | `/api/data` | all trips + check-ins (also your backup) |
+| POST | `/api/trips` | add trip |
+| PUT/DELETE | `/api/trips/:id` | edit / delete |
+| POST | `/api/checkin` | `{lat, lon, date?, time?, city?, country?}` |
+| DELETE | `/api/checkins/:id` | |
+| GET | `/api/airports?q=` | airport search |
+| GET | `/api/geocode?q=` | place search (OSM) |
+| POST | `/api/gmail/sync` | import from Gmail |
+
+## Ideas / next steps
+
+- Import Flighty's CSV export or a TripIt feed
+- Reverse-geocode check-ins against Google Maps Timeline exports for past years
+- Real road distance for drives (OSRM)

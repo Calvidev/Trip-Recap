@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { listCheckins, listTrips, removeBadCheckins } from "@/lib/trips";
+import { listGroups } from "@/lib/groups";
 import { syncAutoTrips } from "@/lib/autotrips";
 
 let cleaned = false;
@@ -12,5 +13,5 @@ export async function GET() {
     cleaned = true;
     if (removeBadCheckins() > 0) syncAutoTrips(); // drops auto trips that came from bad rows
   }
-  return NextResponse.json({ trips: listTrips(), checkins: listCheckins() });
+  return NextResponse.json({ trips: listTrips(), checkins: listCheckins(), groups: listGroups() });
 }

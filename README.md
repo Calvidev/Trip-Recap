@@ -15,6 +15,10 @@ and ferries, and it counts **how many days and nights you spent in every country
   a trip is created between them. It's assumed to be a drive, or a flight if it's over 1,000 km. Moves you
   already logged (by hand or from Gmail) are skipped. Edited auto trips are kept as you left them, and
   deleted ones don't come back.
+- 🧳 **Trip groups.** Tap **Select** in Trips to group legs by hand, or use **✨ Auto-group**: each time you
+  leave home (the city where you've spent the most nights) and come back becomes one group, named after
+  the countries you visited. A group shows as one card with its dates, legs, km and flags, and its route
+  is highlighted on the map. Ungrouping keeps the trips.
 - 📧 **Gmail import.** It reads airline and rail booking emails through their schema.org markup.
   It can also use Claude for emails that don't have that markup.
 - 📊 **Stats**: distance, time in the air, airports, airlines, top routes.

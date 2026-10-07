@@ -8,7 +8,7 @@ import StatsPanel from "./StatsPanel";
 import SettingsPanel from "./SettingsPanel";
 import { buildDayLog, totals } from "@/lib/stays";
 import { localToday } from "@/lib/format";
-import type { Checkin, Trip } from "@/lib/types";
+import type { Checkin, Trip, TripGroup } from "@/lib/types";
 
 const MapView = dynamic(() => import("./MapView"), { ssr: false, loading: () => <div className="h-full w-full bg-bg" /> });
 
@@ -23,6 +23,8 @@ const TABS: { id: Tab; label: string }[] = [
 export default function App() {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [checkins, setCheckins] = useState<Checkin[]>([]);
+  const [groups, setGroups] = useState<TripGroup[]>([]);
+  const [focusIds, setFocusIds] = useState<number[] | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [year, setYear] = useState<number | "all">("all");
   const [tab, setTab] = useState<Tab>("trips");
@@ -37,6 +39,7 @@ export default function App() {
       const d = await r.json();
       setTrips(d.trips);
       setCheckins(d.checkins);
+      setGroups(d.groups ?? []);
     }
     setLoaded(true);
   }, []);
@@ -66,7 +69,7 @@ export default function App() {
     <div className="fixed inset-0 overflow-hidden">
       {/* Map */}
       <div className="absolute inset-0 md:left-[440px]">
-        <MapView trips={visibleTrips} cities={tot.cities} selectedId={selectedId} onSelect={open} />
+        <MapView trips={visibleTrips} cities={tot.cities} selectedIds={selectedId != null ? [selectedId] : focusIds} onSelect={open} />
       </div>
 
       {/* Top bar: year filter */}
@@ -107,7 +110,7 @@ export default function App() {
           {!loaded ? (
             <p className="text-muted">Loading…</p>
           ) : tab === "trips" ? (
-            <TripsPanel trips={visibleTrips} onOpen={open} />
+            <TripsPanel trips={visibleTrips} groups={groups} onOpen={open} onChanged={load} onFocus={setFocusIds} />
           ) : tab === "places" ? (
             <PlacesPanel totals={tot} log={log} isAllTime={year === "all"} />
           ) : tab === "stats" ? (

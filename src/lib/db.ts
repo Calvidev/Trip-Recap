@@ -40,6 +40,11 @@ function open(): Database.Database {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS checkins_date ON checkins(date);
+    CREATE TABLE IF NOT EXISTS trip_groups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
     CREATE TABLE IF NOT EXISTS auto_dismissed (external_id TEXT PRIMARY KEY);
     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS gmail_messages (
@@ -47,6 +52,9 @@ function open(): Database.Database {
       processed_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
+  // Migrations for databases created by earlier versions.
+  const cols = (db.prepare("PRAGMA table_info(trips)").all() as { name: string }[]).map((c) => c.name);
+  if (!cols.includes("group_id")) db.exec("ALTER TABLE trips ADD COLUMN group_id INTEGER REFERENCES trip_groups(id) ON DELETE SET NULL");
   return db;
 }
 
@@ -83,6 +91,7 @@ export function rowToTrip(r: Row): Trip {
     distanceKm: r.distance_km as number,
     durationMin: (r.duration_min as number) ?? null,
     source: r.source as string,
+    groupId: (r.group_id as number) ?? null,
   };
 }
 

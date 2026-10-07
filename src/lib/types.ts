@@ -25,9 +25,16 @@ export interface Trip {
   distanceKm: number;
   durationMin: number | null;
   source: "manual" | "gmail" | string;
+  groupId: number | null;
 }
 
-export type TripInput = Omit<Trip, "id" | "distanceKm" | "source"> & {
+/** A named set of trips, e.g. "Europe 2026" (out, the legs in between, and back). */
+export interface TripGroup {
+  id: number;
+  name: string;
+}
+
+export type TripInput = Omit<Trip, "id" | "distanceKm" | "source" | "groupId"> & {
   distanceKm?: number | null;
   source?: string;
   externalId?: string | null;

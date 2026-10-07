@@ -7,7 +7,7 @@ const P = (city: string, country: string): Place => ({ name: city, city, country
 let id = 0;
 const trip = (o: Place, d: Place, dd: string, dt: string | null, ad: string, at: string | null, mode: Trip["mode"] = "flight"): Trip => ({
   id: ++id, mode, origin: o, dest: d, departDate: dd, departTime: dt, arriveDate: ad, arriveTime: at,
-  flightNumber: null, airline: null, notes: null, distanceKm: 0, durationMin: null, source: "manual",
+  flightNumber: null, airline: null, notes: null, distanceKm: 0, durationMin: null, source: "manual", groupId: null,
 });
 
 const MEX = P("Mexico City", "MX"), MAD = P("Madrid", "ES"), PAR = P("Paris", "FR");

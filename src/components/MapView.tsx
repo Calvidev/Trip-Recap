@@ -11,7 +11,7 @@ import type { Trip } from "@/lib/types";
 interface Props {
   trips: Trip[];
   cities: PlaceTotal[];
-  selectedId: number | null;
+  selectedIds: number[] | null; // highlighted trips (one trip, or a group's legs)
   onSelect: (t: Trip) => void;
 }
 
@@ -71,7 +71,8 @@ function Basemap() {
   );
 }
 
-export default function MapView({ trips, cities, selectedId, onSelect }: Props) {
+export default function MapView({ trips, cities, selectedIds, onSelect }: Props) {
+  const sel = useMemo(() => new Set(selectedIds ?? []), [selectedIds]);
   const lines = useMemo(() => trips.map((t) => ({ t, pts: linePoints(t) })), [trips]);
   const maxNights = Math.max(1, ...cities.map((c) => c.nights));
 
@@ -89,12 +90,12 @@ export default function MapView({ trips, cities, selectedId, onSelect }: Props) 
       <FitBounds trips={trips} cities={cities} />
       {lines.map(({ t, pts }) => {
         const m = MODE_META[t.mode];
-        const sel = t.id === selectedId;
+        const on = sel.has(t.id);
         return (
           <Polyline
             key={t.id}
             positions={pts}
-            pathOptions={{ color: m.color, weight: sel ? 4 : 2, opacity: selectedId && !sel ? 0.25 : 0.85, dashArray: m.dash }}
+            pathOptions={{ color: m.color, weight: on ? 4 : 2, opacity: sel.size && !on ? 0.2 : 0.85, dashArray: m.dash }}
             eventHandlers={{ click: () => onSelect(t) }}
           >
             <Tooltip sticky>

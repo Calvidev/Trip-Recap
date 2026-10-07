@@ -1,6 +1,6 @@
 "use client";
 import "leaflet/dist/leaflet.css";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CircleMarker, MapContainer, Polyline, Popup, TileLayer, Tooltip, useMap } from "react-leaflet";
 import L from "leaflet";
 import { greatCircle, countryName } from "@/lib/geo";
@@ -36,6 +36,41 @@ function FitBounds({ trips, cities }: { trips: Trip[]; cities: PlaceTotal[] }) {
   return null;
 }
 
+// Free basemaps that need no API key. Esri's dark canvas is the default; if its
+// tiles fail to load we fall back to OpenStreetMap, darkened with a CSS filter.
+const BASEMAPS = [
+  {
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+    labels: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+    attribution: "Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors",
+    className: "",
+  },
+  {
+    url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    labels: null,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    className: "osm-dark",
+  },
+];
+
+function Basemap() {
+  const [i, setI] = useState(0);
+  const errors = useRef(0);
+  const b = BASEMAPS[i];
+  const onError = () => {
+    if (++errors.current >= 4 && i < BASEMAPS.length - 1) {
+      errors.current = 0;
+      setI(i + 1);
+    }
+  };
+  return (
+    <>
+      <TileLayer key={b.url} url={b.url} attribution={b.attribution} className={b.className} maxZoom={16} eventHandlers={{ tileerror: onError }} />
+      {b.labels && <TileLayer key={b.labels} url={b.labels} maxZoom={16} />}
+    </>
+  );
+}
+
 export default function MapView({ trips, cities, selectedId, onSelect }: Props) {
   const lines = useMemo(() => trips.map((t) => ({ t, pts: linePoints(t) })), [trips]);
   const maxNights = Math.max(1, ...cities.map((c) => c.nights));
@@ -50,11 +85,7 @@ export default function MapView({ trips, cities, selectedId, onSelect }: Props) 
       className="h-full w-full"
       attributionControl
     >
-      <TileLayer
-        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>'
-        subdomains="abcd"
-      />
+      <Basemap />
       <FitBounds trips={trips} cities={cities} />
       {lines.map(({ t, pts }) => {
         const m = MODE_META[t.mode];

@@ -48,6 +48,7 @@ body { font-family: var(--font-sans); -webkit-font-smoothing: antialiased; overs
 }
 
 /* Leaflet dark tweaks */
+.osm-dark { filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9) saturate(0.4); }
 .leaflet-container { background: #0b0e14; font-family: var(--font-sans); }
 .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--color-panel-2); color: var(--color-fg); border: 1px solid var(--color-line); }
 .leaflet-popup-content { margin: 10px 14px; font-size: 13px; }

@@ -30,7 +30,7 @@ The logic is in `src/lib/stays.ts`, with tests in `test/stays.test.ts`.
 
 ## Why not Google Maps?
 
-You don't need it. The map is Leaflet with free CARTO/OpenStreetMap tiles.
+You don't need it. The map is Leaflet with free Esri dark-canvas tiles (OpenStreetMap as fallback).
 Place search and reverse geocoding use OpenStreetMap Nominatim, and airports come from a bundled
 dataset. So there's no API key, no billing account and no quota to manage.
 

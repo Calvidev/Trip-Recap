@@ -45,7 +45,18 @@ npm test                       # day-counting tests
 
 Data lives in SQLite at `$DATA_DIR/trip-recap.db` (default `./data`).
 
-### Deploy
+### Deploy on a Raspberry Pi / home server (docker compose)
+
+```bash
+git clone https://github.com/Calvidev/Trip-Recap.git && cd Trip-Recap
+cp .env.example .env && nano .env      # set APP_TOKEN and APP_URL
+docker compose up -d --build           # app on port 3100
+# one-off import of an existing location log:
+curl -X POST --data-binary @ubicaciones.csv -H "Content-Type: text/csv" \
+  -H "Authorization: Bearer $APP_TOKEN" http://localhost:3100/api/checkins/import
+```
+
+### Deploy elsewhere
 
 Use any host with a persistent disk: Fly.io, Railway, Render with a disk, a VPS, or a home server.
 **Vercel's serverless filesystem won't keep the SQLite file.**

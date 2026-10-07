@@ -9,7 +9,8 @@ export async function POST(req: Request) {
   res.cookies.set("tr_token", token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    // Secure only over HTTPS (e.g. via Cloudflare), so plain-http LAN access still works.
+    secure: req.headers.get("x-forwarded-proto") === "https" || new URL(req.url).protocol === "https:",
     path: "/",
     maxAge: 60 * 60 * 24 * 365,
   });

@@ -1,0 +1,13 @@
+services:
+  trip-recap:
+    build: .
+    container_name: trip-recap
+    restart: unless-stopped
+    ports:
+      - "3100:3000"
+    env_file: .env
+    environment:
+      DATA_DIR: /data
+      TZ: ${TZ:-America/Monterrey}
+    volumes:
+      - ./data:/data

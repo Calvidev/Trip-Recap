@@ -26,11 +26,9 @@ export default function TripForm({ initial, onSaved, onClose }: Props) {
   const [error, setError] = useState("");
 
   const isFlight = mode === "flight";
-  const switchMode = (m: Mode) => {
-    // Airport picks don't make sense for ground trips and vice versa.
-    if ((m === "flight") !== isFlight) { setOrigin(null); setDest(null); }
-    setMode(m);
-  };
+  // Changing the mode keeps From/To. A flight can start or end at a city; tap
+  // the place to swap in a specific airport if you want one.
+  const switchMode = (m: Mode) => setMode(m);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -85,6 +83,9 @@ export default function TripForm({ initial, onSaved, onClose }: Props) {
       </div>
 
       <div className="space-y-3">
+        {isFlight && editing && (!origin?.code || !dest?.code) && (
+          <p className="text-xs text-muted">Optional: tap From or To to pick the exact airport.</p>
+        )}
         <div>
           <label className="label">From</label>
           <PlaceInput kind={isFlight ? "airport" : "place"} value={origin} onChange={setOrigin} />

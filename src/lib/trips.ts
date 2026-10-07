@@ -169,3 +169,12 @@ export async function repairUnknownCheckins(
   }
   return { fixed, remaining: countUnknownCheckins() };
 }
+
+/**
+ * Removes check-ins that can't be placed: 0,0 coordinates (a missing GPS fix
+ * imported as zeros) and rows still "Unknown" after a repair attempt that
+ * found nothing. Without them, you simply stay where your last good check-in was.
+ */
+export function removeBadCheckins(): number {
+  return db().prepare("DELETE FROM checkins WHERE (lat = 0 AND lon = 0)").run().changes;
+}

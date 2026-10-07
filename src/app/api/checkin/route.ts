@@ -3,6 +3,7 @@ import { z } from "zod";
 import { reverseGeocode } from "@/lib/geocode";
 import { addCheckin } from "@/lib/trips";
 import { syncAutoTrips } from "@/lib/autotrips";
+import { isValidCoord } from "@/lib/csv";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,8 @@ export const dynamic = "force-dynamic";
  * Shortcuts' location output is also accepted as "latitude"/"longitude" strings.
  * `city`/`country` are optional; if missing we reverse-geocode.
  */
-const num = z.union([z.number(), z.string().transform((s) => Number(s.replace(",", ".")))]).pipe(z.number().finite());
+// Empty strings (no GPS fix) must fail, not become 0.
+const num = z.union([z.number(), z.string().trim().min(1).transform((s) => Number(s.replace(",", ".")))]).pipe(z.number().finite());
 const Schema = z.object({
   lat: num.optional(),
   lon: num.optional(),
@@ -32,8 +34,8 @@ export async function POST(req: Request) {
   if (!p.success) return NextResponse.json({ error: p.error.issues }, { status: 400 });
   const lat = p.data.lat ?? p.data.latitude;
   const lon = p.data.lon ?? p.data.longitude;
-  if (lat == null || lon == null || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
-    return NextResponse.json({ error: "lat/lon required" }, { status: 400 });
+  if (lat == null || lon == null || !isValidCoord(lat, lon)) {
+    return NextResponse.json({ error: "No valid location (lat/lon missing or 0,0). Check Location permission for Shortcuts." }, { status: 400 });
   }
   const now = new Date();
   const date = p.data.date ?? now.toISOString().slice(0, 10);

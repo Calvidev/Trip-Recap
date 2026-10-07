@@ -19,6 +19,11 @@ export function splitCsvLine(line: string): string[] {
   return out.map((s) => s.trim());
 }
 
+/** Real coordinates: in range and not the 0,0 a missing GPS fix turns into. */
+export function isValidCoord(lat: number, lon: number): boolean {
+  return Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180 && !(lat === 0 && lon === 0);
+}
+
 const pad = (n: number) => String(n).padStart(2, "0");
 
 /**
@@ -34,9 +39,10 @@ export function parseLocationCsv(text: string): { rows: Omit<Checkin, "id">[]; s
   for (const raw of text.split(/\r?\n/)) {
     if (!raw.trim()) continue;
     const [d, la, lo, city, , cc] = splitCsvLine(raw);
-    const lat = Number(la), lon = Number(lo);
+    // Note Number("") === 0: a row with no coordinates must not become 0,0 (off West Africa).
+    const lat = la ? Number(la) : NaN, lon = lo ? Number(lo) : NaN;
     const m = d?.match(/^(\d{4}-\d{2}-\d{2})(T.*)?$/);
-    if (!m || !Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+    if (!m || !isValidCoord(lat, lon)) {
       skipped++;
       continue;
     }

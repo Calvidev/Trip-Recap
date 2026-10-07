@@ -21,3 +21,9 @@ test("parses the n8n ubicaciones.csv format", () => {
   assert.equal(rows[1].city, "San Pedro Garza García");
   assert.match(rows[1].date, /^2026-10-0[67]$/); // depends on the test machine's time zone
 });
+
+test("rows without coordinates are skipped, not imported as 0,0", () => {
+  const { rows, skipped } = parseLocationCsv(["2026-02-01,,,,,,", "2026-02-02,0,0,Unknown,,,", "2026-02-03,25.62,-100.35,Monterrey,México,MX,x"].join("\n"));
+  assert.equal(rows.length, 1);
+  assert.equal(skipped, 2);
+});

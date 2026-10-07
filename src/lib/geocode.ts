@@ -1,6 +1,7 @@
 import "server-only";
 import type { Place } from "./types";
 import { nearestAirport } from "./airports";
+import { haversineKm } from "./geo";
 
 // OpenStreetMap Nominatim: free, no API key. Usage policy: max ~1 req/s and a
 // descriptive User-Agent. Fine for a personal travel log.
@@ -51,6 +52,8 @@ export async function reverseGeocode(lat: number, lon: number): Promise<{ city: 
   } catch {
     /* fall through to offline lookup */
   }
+  // Only trust the nearest airport if it's actually close; in the middle of the
+  // ocean (or at a bogus 0,0) "nearest" can be a thousand km away.
   const a = nearestAirport(lat, lon);
-  return a ? { city: a.city, country: a.country } : { city: "Unknown", country: "??" };
+  return a && haversineKm(lat, lon, a.lat, a.lon) <= 100 ? { city: a.city, country: a.country } : { city: "Unknown", country: "??" };
 }

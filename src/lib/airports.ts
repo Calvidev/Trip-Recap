@@ -61,6 +61,18 @@ export function nearestAirport(lat: number, lon: number): Airport | null {
 
 const fold = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
+/** Rough middle of a country: the average position of its airports (offline fallback). */
+export function countryCenter(country: string): { lat: number; lon: number } | null {
+  const cc = country.toUpperCase();
+  let n = 0, lat = 0, lon = 0;
+  for (const code in AIRPORTS) {
+    const r = AIRPORTS[code];
+    if (r[2] !== cc) continue;
+    n++; lat += r[3]; lon += r[4];
+  }
+  return n ? { lat: lat / n, lon: lon / n } : null;
+}
+
 /** Offline city → coordinates, using the airports of that city (biggest first). */
 export function cityAirport(city: string, country: string): Airport | null {
   const c = fold(city);

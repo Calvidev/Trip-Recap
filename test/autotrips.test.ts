@@ -42,3 +42,12 @@ test("unknown places are skipped and ids are stable", () => {
   assert.equal(t.fromDate, "2026-09-01");
   assert.equal(t.externalId, inferTrips([...cs].reverse(), [])[0].externalId);
 });
+
+test("country-only check-ins don't create trips within that country", () => {
+  const cs = [
+    c("2026-03-20", "San Pedro Garza García", "MX", ...SPGG),
+    c("2026-03-21", "Germany (city unknown)", "DE", 51.1, 10.4),
+    c("2026-03-25", "Berlin", "DE", 52.52, 13.4),
+  ];
+  assert.deepEqual(inferTrips(cs, []).map((t) => [t.origin.city, t.dest.city]), [["San Pedro Garza García", "Germany (city unknown)"]]);
+});

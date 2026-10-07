@@ -26,10 +26,11 @@ test("rows without coordinates: kept if they name a city, otherwise skipped (nev
   const { rows, skipped } = parseLocationCsv([
     "2026-02-01,,,,,,",
     "2026-02-02,0,0,Unknown,,,",
+    "2026-03-21T12:00:00.000Z,,,,Alemania,DE,",
     "2026-02-03,25.62,-100.35,Monterrey,México,MX,x",
     "2026-02-04,,,Berlín,Alemania,DE,",
     "2026-02-05,0,0,Estambul,Turquía,,",
   ].join("\n"));
   assert.equal(skipped, 2);
-  assert.deepEqual(rows.map((r) => [r.city, r.country, r.lat]), [["Monterrey", "MX", 25.62], ["Berlín", "DE", null], ["Estambul", "??", null]]);
+  assert.deepEqual(rows.map((r) => [r.city, r.country, r.lat]), [["", "DE", null], ["Monterrey", "MX", 25.62], ["Berlín", "DE", null], ["Estambul", "??", null]]);
 });

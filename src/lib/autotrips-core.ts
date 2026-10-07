@@ -1,4 +1,5 @@
 import { haversineKm } from "./geo.ts";
+import { isApproxCity } from "./places.ts";
 import type { Checkin, Mode, Place, Trip } from "./types";
 
 /**
@@ -32,6 +33,8 @@ export function inferTrips(checkins: Checkin[], realTrips: Pick<Trip, "departDat
   for (let i = 1; i < pts.length; i++) {
     const a = pts[i - 1], b = pts[i];
     if (cityKey(a) === cityKey(b)) continue;
+    // "Germany (city unknown)" → Berlin isn't a trip, just a better fix inside the same country.
+    if (a.country.toUpperCase() === b.country.toUpperCase() && (isApproxCity(a.city) || isApproxCity(b.city))) continue;
     const km = haversineKm(a.lat, a.lon, b.lat, b.lon);
     if (km < minKm) continue;
     // A trip you logged yourself (or from Gmail) during these days already explains the move.

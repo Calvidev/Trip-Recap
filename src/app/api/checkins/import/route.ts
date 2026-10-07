@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseLocationCsv } from "@/lib/csv";
+import { isFlightyCsv } from "@/lib/flighty";
+import { importFlighty } from "@/lib/flighty-import";
 import { resolveRows } from "@/lib/locate";
 import { importCheckins } from "@/lib/trips";
 import { syncAutoTrips } from "@/lib/autotrips";
@@ -26,7 +28,9 @@ export const maxDuration = 300;
 
 export async function POST(req: Request) {
   if (req.headers.get("content-type")?.startsWith("text/")) {
-    const parsed = parseLocationCsv(await req.text());
+    const text = await req.text();
+    if (isFlightyCsv(text)) return NextResponse.json({ flighty: importFlighty(text) });
+    const parsed = parseLocationCsv(text);
     const { rows, unresolved } = await resolveRows(parsed.rows);
     const result = importCheckins(rows);
     return NextResponse.json({ ...result, skipped: parsed.skipped + unresolved, autoTrips: syncAutoTrips() });

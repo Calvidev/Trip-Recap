@@ -5,6 +5,14 @@ import type { Place } from "./types";
 type Row = [name: string, city: string, country: string, lat: number, lon: number, tz: string];
 const AIRPORTS = data as unknown as Record<string, Row>;
 
+// The dataset names some big airports after their suburb; use the city people mean,
+// so e.g. IST and SAW both count as Istanbul.
+const CITY_FIX: Record<string, string> = {
+  IST: "Istanbul", EZE: "Buenos Aires", AEP: "Buenos Aires", PTY: "Panama City", SAL: "San Salvador",
+  IAD: "Washington", FRA: "Frankfurt", DPS: "Denpasar", DFW: "Dallas", NLU: "Mexico City",
+};
+for (const [code, city] of Object.entries(CITY_FIX)) if (AIRPORTS[code]) AIRPORTS[code][1] = city;
+
 export interface Airport extends Place {
   code: string;
   tz: string;

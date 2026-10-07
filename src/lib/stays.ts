@@ -1,4 +1,5 @@
 import type { Checkin, Trip } from "./types";
+import { isApproxCity } from "./places.ts";
 
 /**
  * Works out where you were on every calendar day, from trips and nightly
@@ -70,7 +71,15 @@ export function addDays(date: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-export function buildDayLog(trips: Trip[], checkins: Checkin[], until: string): DayEntry[] {
+export function buildDayLog(trips: Trip[], allCheckins: Checkin[], until: string): DayEntry[] {
+  // Country-only check-ins ("Germany (city unknown)", usually backfilled by hand) are
+  // less precise than your trips: wherever trips already place you that day, they win.
+  // Country-only check-ins only fill days your trips say nothing about.
+  let checkins = allCheckins;
+  if (trips.length && allCheckins.some((c) => isApproxCity(c.city))) {
+    const known = new Set(buildDayLog(trips, [], until).filter((d) => d.touched.length).map((d) => d.date));
+    checkins = allCheckins.filter((c) => !isApproxCity(c.city) || !known.has(c.date));
+  }
   const events: Event[] = [];
   for (const tr of trips) {
     events.push({

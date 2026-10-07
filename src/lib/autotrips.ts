@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "./db";
-import { inferTrips } from "./autotrips-core";
+import { inferGapTrips, inferTrips, type InferredTrip } from "./autotrips-core";
 import { createTrip, listCheckins, listTrips } from "./trips";
 
 /**
@@ -11,7 +11,9 @@ import { createTrip, listCheckins, listTrips } from "./trips";
 export function syncAutoTrips(): { added: number; removed: number } {
   const trips = listTrips();
   const real = trips.filter((t) => t.source !== "auto");
-  const wanted = inferTrips(listCheckins(), real);
+  const checkins = listCheckins();
+  const logged = trips.filter((t) => !t.source.startsWith("auto")); // flights you took (Flighty, Gmail, by hand)
+  const wanted: (InferredTrip & { groupId?: number | null })[] = [...inferTrips(checkins, real), ...inferGapTrips(logged, checkins)];
   const wantedIds = new Set(wanted.map((w) => w.externalId));
 
   const dismissed = new Set((db().prepare("SELECT external_id FROM auto_dismissed").all() as { external_id: string }[]).map((r) => r.external_id));
@@ -30,7 +32,17 @@ export function syncAutoTrips(): { added: number; removed: number } {
   for (const w of wanted) {
     if (existingIds.has(w.externalId) || dismissed.has(w.externalId)) continue;
     const note = w.fromDate === w.date ? "Auto-detected from your check-ins" : `Auto-detected: last seen in ${w.origin.city} on ${w.fromDate}`;
-    if (createTrip({ mode: w.mode, origin: w.origin, dest: w.dest, departDate: w.date, arriveDate: w.date, notes: note, source: "auto", externalId: w.externalId })) added++;
+    const gap = w.externalId.startsWith("auto:gap:");
+    const t = createTrip({
+      mode: w.mode, origin: w.origin, dest: w.dest, departDate: w.date, arriveDate: w.date,
+      departTime: w.departTime ?? null, arriveTime: w.arriveTime ?? null,
+      notes: gap ? "Auto-detected: connects two of your flights (date and mode are a guess)" : note,
+      source: "auto", externalId: w.externalId,
+    });
+    if (t) {
+      added++;
+      if (w.groupId != null) db().prepare("UPDATE trips SET group_id = ? WHERE id = ?").run(w.groupId, t.id);
+    }
   }
   return { added, removed };
 }

@@ -19,6 +19,11 @@ and ferries, and it counts **how many days and nights you spent in every country
   leave home (the city where you've spent the most nights) and come back becomes one group, named after
   the countries you visited. A group shows as one card with its dates, legs, km and flags, and its route
   is highlighted on the map. Ungrouping keeps the trips.
+- ✈️ **Flighty import.** Upload Flighty's CSV export in Settings. You get real departure and arrival
+  times (actual first, then scheduled), airlines, aircraft and seats, and diversions handled. Re-importing
+  updates flights in place. Real flights replace the trips guessed from check-ins and keep their groups.
+  Ground legs between flights that don't connect (e.g. Hannover → Düsseldorf) are added as guesses you can edit.
+  Where your flights already place you, they beat country-only check-ins.
 - 📧 **Gmail import.** It reads airline and rail booking emails through their schema.org markup.
   It can also use Claude for emails that don't have that markup.
 - 📊 **Stats**: distance, time in the air, airports, airlines, top routes.

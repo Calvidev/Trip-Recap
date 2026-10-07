@@ -4,6 +4,7 @@ import PlaceInput from "./PlaceInput";
 import { fmtDate, localToday } from "@/lib/format";
 import { countryName, flagEmoji } from "@/lib/geo";
 import { parseLocationCsv } from "@/lib/csv";
+import { isFlightyCsv } from "@/lib/flighty";
 import type { Checkin, Place } from "@/lib/types";
 
 interface GmailStatus { configured: boolean; connected: boolean; lastSync: string | null; claude: boolean }
@@ -111,8 +112,22 @@ function CsvImport({ onChanged }: { onChanged: () => void }) {
     e.target.value = "";
     if (!file) return;
     const text = await file.text();
+    if (isFlightyCsv(text)) {
+      setMsg("Importing your Flighty flights…");
+      const r = await fetch("/api/checkins/import", { method: "POST", headers: { "Content-Type": "text/csv" }, body: text }).then((r) => r.json());
+      const f = r.flighty;
+      setMsg(!f ? "⚠️ Import failed." : [
+        `✈️ ${f.added} flights added${f.updated ? `, ${f.updated} updated` : ""}${f.canceled ? `, ${f.canceled} canceled skipped` : ""}.`,
+        f.replaced ? `Replaced ${f.replaced} guessed trips with the real flights.` : "",
+        f.autoTrips?.added ? `Added ${f.autoTrips.added} ground legs between flights (check the mode).` : "",
+        f.unknownAirports?.length ? `Unknown airports: ${f.unknownAirports.join(", ")}.` : "",
+        "Tap ✨ Auto-group in Trips to group new journeys.",
+      ].filter(Boolean).join(" "));
+      onChanged();
+      return;
+    }
     const { rows } = parseLocationCsv(text);
-    if (!rows.length) return setMsg("No rows found. Expected: date,lat,lon,city,country,countryCode,…");
+    if (!rows.length) return setMsg("No rows found. Expected a Flighty export or: date,lat,lon,city,country,countryCode,…");
     setMsg(`Importing ${rows.length} locations… (cities without coordinates are looked up, this can take a minute)`);
     const r = await fetch("/api/checkins/import", { method: "POST", headers: { "Content-Type": "text/csv" }, body: text }).then((r) => r.json());
     setMsg(r.error ? "⚠️ Import failed." : `Added ${r.added} locations${r.duplicates ? `, ${r.duplicates} already there` : ""}${r.skipped ? `, ${r.skipped} lines skipped` : ""}.${r.autoTrips?.added ? ` Detected ${r.autoTrips.added} trips.` : ""}`);
@@ -120,9 +135,11 @@ function CsvImport({ onChanged }: { onChanged: () => void }) {
   }
   return (
     <div className="card space-y-2 text-sm">
-      <div className="font-semibold">🗂️ Import location history</div>
+      <div className="font-semibold">🗂️ Import a CSV</div>
       <p className="text-muted">
-        Upload a CSV with one location per line: <code className="text-fg">date,lat,lon,city,country,countryCode</code> (extra columns are ignored). Works with the n8n <code className="text-fg">ubicaciones.csv</code>. Re-importing the same file won&apos;t create duplicates.
+        <b className="text-fg">Flighty export</b> (Flighty → Settings → Export flights): your flights with real times, airlines and seats.
+        Or a <b className="text-fg">location history</b> with one place per line: <code className="text-fg">date,lat,lon,city,country,countryCode</code>, like the n8n <code className="text-fg">ubicaciones.csv</code>.
+        Importing the same file again updates it and won&apos;t create duplicates.
       </p>
       <label className="btn-ghost w-full cursor-pointer">
         Choose CSV file

@@ -118,7 +118,7 @@ function CsvImport({ onChanged }: { onChanged: () => void }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(rows),
     }).then((r) => r.json());
-    setMsg(r.error ? "⚠️ Import failed." : `Added ${r.added} locations${r.duplicates ? `, ${r.duplicates} already there` : ""}${skipped ? `, ${skipped} lines skipped` : ""}.`);
+    setMsg(r.error ? "⚠️ Import failed." : `Added ${r.added} locations${r.duplicates ? `, ${r.duplicates} already there` : ""}${skipped ? `, ${skipped} lines skipped` : ""}.${r.autoTrips?.added ? ` Detected ${r.autoTrips.added} trips.` : ""}`);
     onChanged();
   }
   return (

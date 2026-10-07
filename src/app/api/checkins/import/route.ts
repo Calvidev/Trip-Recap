@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseLocationCsv } from "@/lib/csv";
 import { importCheckins } from "@/lib/trips";
+import { syncAutoTrips } from "@/lib/autotrips";
 
 const Row = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -23,9 +24,11 @@ const Row = z.object({
 export async function POST(req: Request) {
   if (req.headers.get("content-type")?.startsWith("text/")) {
     const { rows, skipped } = parseLocationCsv(await req.text());
-    return NextResponse.json({ ...importCheckins(rows), skipped });
+    const result = importCheckins(rows);
+    return NextResponse.json({ ...result, skipped, autoTrips: syncAutoTrips() });
   }
   const parsed = z.array(Row).max(50000).safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues.slice(0, 5) }, { status: 400 });
-  return NextResponse.json(importCheckins(parsed.data));
+  const result = importCheckins(parsed.data);
+  return NextResponse.json({ ...result, autoTrips: syncAutoTrips() });
 }

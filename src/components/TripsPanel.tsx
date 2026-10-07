@@ -44,6 +44,7 @@ export default function TripsPanel({ trips, onOpen }: { trips: Trip[]; onOpen: (
                           </span>
                           {upcoming && <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-semibold text-accent">UPCOMING</span>}
                           {t.source === "gmail" && <span className="text-[10px] text-muted">via Gmail</span>}
+                          {t.source === "auto" && <span className="rounded-full bg-drive/15 px-2 py-0.5 text-[10px] font-semibold text-drive">AUTO</span>}
                         </div>
                         <div className="truncate text-xs text-muted">
                           {flagEmoji(t.origin.country)} {t.origin.city} → {flagEmoji(t.dest.country)} {t.dest.city}

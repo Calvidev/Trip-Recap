@@ -40,6 +40,7 @@ function open(): Database.Database {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS checkins_date ON checkins(date);
+    CREATE TABLE IF NOT EXISTS auto_dismissed (external_id TEXT PRIMARY KEY);
     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS gmail_messages (
       id TEXT PRIMARY KEY, subject TEXT, status TEXT NOT NULL, trips_added INTEGER NOT NULL DEFAULT 0,

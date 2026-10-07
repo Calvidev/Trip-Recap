@@ -11,6 +11,10 @@ and ferries, and it counts **how many days and nights you spent in every country
   Schengen 90/180 counter.
 - 🌙 **Nightly iPhone check-in.** A Shortcuts automation posts your location every
   night, which fills the gaps between trips. See [docs/IPHONE_SHORTCUT.md](docs/IPHONE_SHORTCUT.md).
+- 🚗 **Auto-detected trips.** When two check-ins in a row are in different cities more than 50 km apart,
+  a trip is created between them. It's assumed to be a drive, or a flight if it's over 1,000 km. Moves you
+  already logged (by hand or from Gmail) are skipped. Edited auto trips are kept as you left them, and
+  deleted ones don't come back.
 - 📧 **Gmail import.** It reads airline and rail booking emails through their schema.org markup.
   It can also use Claude for emails that don't have that markup.
 - 📊 **Stats**: distance, time in the air, airports, airlines, top routes.

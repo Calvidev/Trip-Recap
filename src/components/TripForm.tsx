@@ -133,6 +133,12 @@ export default function TripForm({ initial, onSaved, onClose }: Props) {
         <input className="input" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Seat, who you travelled with…" />
       </div>
 
+      {initial?.source === "auto" && (
+        <p className="rounded-xl border border-drive/30 bg-drive/10 p-3 text-xs text-muted">
+          Detected from your nightly check-ins and assumed to be by {initial.mode === "flight" ? "plane (too far to drive overnight)" : "car"}. Fix anything that&apos;s wrong and save. Edited trips stay as you leave them, and deleted ones won&apos;t come back.
+        </p>
+      )}
+
       {error && <p className="text-sm text-red-400">{error}</p>}
 
       <div className="flex gap-2 pt-1">

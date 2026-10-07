@@ -4,6 +4,7 @@ import { claudeEnabled, extractFromJsonLd, extractWithClaude, type Segment } fro
 import { airport } from "./airports";
 import { geocode } from "./geocode";
 import { createTrip, type TripPayload } from "./trips";
+import { syncAutoTrips } from "./autotrips";
 import type { Place } from "./types";
 
 // Gmail via plain REST + OAuth (read-only scope). Create an OAuth client
@@ -147,6 +148,7 @@ export async function syncGmail({ maxMessages = 100, newerThan = "3y" } = {}): P
       result.errors.push(`${subject || id}: ${(e as Error).message}`);
     }
   }
+  syncAutoTrips();
   setSetting("gmail_last_sync", new Date().toISOString());
   return result;
 }

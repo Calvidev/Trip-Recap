@@ -89,11 +89,16 @@ export function updateTrip(id: number, t: TripPayload): Trip | null {
   void _s; void _e;
   const sets = Object.keys(editable).map((c) => `${c} = @${c}`).join(", ");
   db().prepare(`UPDATE trips SET ${sets} WHERE id = @id`).run({ ...editable, id });
+  // Once you edit an auto-detected trip it's yours: re-syncing won't touch it.
+  db().prepare("UPDATE trips SET source = 'auto-edited' WHERE id = ? AND source = 'auto'").run(id);
   return getTrip(id);
 }
 
-export function deleteTrip(id: number) {
+/** Deletes a trip and returns its external id (if any). */
+export function deleteTrip(id: number): string | null {
+  const r = db().prepare("SELECT external_id FROM trips WHERE id = ?").get(id) as { external_id: string | null } | undefined;
   db().prepare("DELETE FROM trips WHERE id = ?").run(id);
+  return r?.external_id ?? null;
 }
 
 export function listCheckins(): Checkin[] {

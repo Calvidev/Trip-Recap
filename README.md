@@ -4,22 +4,23 @@ A self-hosted, Flighty-style travel log. It tracks flights plus trains, drives, 
 and ferries, and it counts **how many days and nights you spent in every country and city**.
 
 - 🗺️ **3D globe map** (MapLibre) of every trip: glowing great-circle arcs for flights and dashed lines for ground
-  trips. City dots are sized by nights. It switches to a flat map with one tap. A built-in world outline means the globe
+  trips. Places you stayed are small, even dots. Tap a trip to see its details card (route, times, distance, flight). It switches to a flat map with one tap. A built-in world outline means the globe
   works even if the online map tiles can't load.
 - ➕ **Add trips by hand.** Airport search runs on a built-in IATA database (~7,900 airports).
   Train, drive, bus and ferry stops are searched on OpenStreetMap.
-- 📅 **Days per country and city**, filterable by year. It also shows a list of your stays and a
-  Schengen 90/180 counter.
+- 📅 **Days per country and city**, filterable by year. **Where you slept** is a share bar of nights per
+  country (nights abroad up top). **Day by day** is a year calendar with every night coloured by its country;
+  tap a day to see where you were. You also get a list of stays and a Schengen 90/180 counter.
 - 🌙 **Nightly iPhone check-in.** A Shortcuts automation posts your location every
   night, which fills the gaps between trips. See [docs/IPHONE_SHORTCUT.md](docs/IPHONE_SHORTCUT.md).
 - 🚗 **Auto-detected trips.** When two check-ins in a row are in different cities more than 50 km apart,
   a trip is created between them. It's assumed to be a drive, or a flight if it's over 1,000 km. Moves you
   already logged (by hand or from Gmail) are skipped. Edited auto trips are kept as you left them, and
   deleted ones don't come back.
-- 🧳 **Trip groups.** Tap **Select** in Trips to group legs by hand, or use **✨ Auto-group**: each time you
+- 🧳 **Trip groups, automatic.** Each time you
   leave home (the city where you've spent the most nights) and come back becomes one group, named after
   the countries you visited. A group shows as one card with its dates, legs, km and flags, and its route
-  is highlighted on the map. Ungrouping keeps the trips.
+  is highlighted on the map. New legs join the journey that's still open. Use **Edit groups** to change them by hand; trips you ungroup stay ungrouped.
 - ✈️ **Flighty import.** Upload Flighty's CSV export in Settings. You get real departure and arrival
   times (actual first, then scheduled), airlines, aircraft and seats, and diversions handled. Re-importing
   updates flights in place. Real flights replace the trips guessed from check-ins and keep their groups.
@@ -31,6 +32,9 @@ and ferries, and it counts **how many days and nights you spent in every country
 - 📧 **Gmail import.** It reads airline and rail booking emails through their schema.org markup.
   It can also use Claude for emails that don't have that markup.
 - 📊 **Stats**: distance, time in the air, airports, airlines, top routes.
+- 🔄 **Hands-off.** The app refreshes itself when you open it and every minute. Auto trips and groups are
+  rebuilt after every import, check-in or email. Settings shows each source (check-in, email, Flighty) with a
+  status light and when it last delivered.
 - 📱 Installable on your home screen (PWA), with a dark map UI.
 
 ## How days are counted

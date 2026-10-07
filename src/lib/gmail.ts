@@ -1,8 +1,9 @@
 import "server-only";
+import { refreshDerived } from "./refresh";
 import { getSetting, setSetting, db } from "./db";
 import { claudeEnabled } from "./extract";
 import { tripsFromEmail } from "./email-trips";
-import { syncAutoTrips } from "./autotrips";
+
 
 // Gmail via plain REST + OAuth (read-only scope). Create an OAuth client
 // ("Web application") in Google Cloud Console, enable the Gmail API, and add
@@ -105,7 +106,7 @@ export async function syncGmail({ maxMessages = 100, newerThan = "3y" } = {}): P
       result.errors.push(`${subject || id}: ${(e as Error).message}`);
     }
   }
-  syncAutoTrips();
+  refreshDerived();
   setSetting("gmail_last_sync", new Date().toISOString());
   return result;
 }

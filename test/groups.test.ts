@@ -24,7 +24,7 @@ test("each journey away from home becomes a group named after the countries", ()
     T(MTY, CORPUS, "2026-07-03"), T(CORPUS, SPGG, "2026-07-06"),
     T(SPGG, CDMX, "2026-08-01"), T(CDMX, SPGG, "2026-08-03"),
   ];
-  assert.deepEqual(suggestGroups(trips, home, "2026-10-07").map((g) => [g.name, g.tripIds.length]), [
+  assert.deepEqual(suggestGroups(trips, home, "2026-10-07").groups.map((g) => [g.name, g.tripIds.length]), [
     ["Germany, Türkiye & United Kingdom · Mar 2026", 4],
     ["United States · Jul 2026", 2],
     ["Mexico City · Aug 2026", 2],
@@ -33,16 +33,24 @@ test("each journey away from home becomes a group named after the countries", ()
 
 test("trips you already grouped are left alone; future trips are ignored", () => {
   const trips = [T(SPGG, DE, "2026-03-21", 7), T(DE, SPGG, "2026-03-30", 7), T(SPGG, CORPUS, "2026-12-01"), T(CORPUS, SPGG, "2026-12-03")];
-  assert.deepEqual(suggestGroups(trips, home, "2026-10-07"), []);
+  assert.deepEqual(suggestGroups(trips, home, "2026-10-07"), { groups: [], extend: [] });
 });
 
 test("an ongoing journey (not back yet) is still grouped", () => {
   const trips = [T(SPGG, DE, "2026-09-01"), T(DE, TR, "2026-09-05")];
-  assert.equal(suggestGroups(trips, home, "2026-10-07")[0].tripIds.length, 2);
+  assert.equal(suggestGroups(trips, home, "2026-10-07").groups[0].tripIds.length, 2);
 });
 
 test("connection countries (same-day layovers) don't name the group", () => {
   const DFW = P("Dallas", "US", 32.9, -97.04);
   const trips = [T(SPGG, DFW, "2026-03-20"), T(DFW, DE, "2026-03-20"), T(DE, SPGG, "2026-03-30")];
-  assert.equal(suggestGroups(trips, home, "2026-10-07")[0].name, "Germany · Mar 2026");
+  assert.equal(suggestGroups(trips, home, "2026-10-07").groups[0].name, "Germany · Mar 2026");
+});
+
+test("new legs of a journey that's already a group join it; trips you ungrouped stay out", () => {
+  const out = T(SPGG, DE, "2026-03-21", 5), mid = T(DE, TR, "2026-03-26", 5);
+  const back = T(TR, SPGG, "2026-04-02"); // came in later (e.g. a forwarded email)
+  assert.deepEqual(suggestGroups([out, mid, back], home, "2026-10-07").extend, [{ groupId: 5, tripIds: [back.id] }]);
+  const removed = { ...T(SPGG, CORPUS, "2026-07-03"), noGroup: true }, ret = T(CORPUS, SPGG, "2026-07-06");
+  assert.deepEqual(suggestGroups([removed, ret], home, "2026-10-07"), { groups: [], extend: [] });
 });

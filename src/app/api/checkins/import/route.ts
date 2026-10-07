@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
+import { refreshDerived } from "@/lib/refresh";
 import { z } from "zod";
 import { parseLocationCsv } from "@/lib/csv";
 import { isFlightyCsv } from "@/lib/flighty";
 import { importFlighty } from "@/lib/flighty-import";
 import { resolveRows } from "@/lib/locate";
-import { importCheckins } from "@/lib/trips";
-import { syncAutoTrips } from "@/lib/autotrips";
+import { importCheckins, repairUnknownCheckins } from "@/lib/trips";
+import { reverseGeocode } from "@/lib/geocode";
+
 
 const Row = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -33,10 +35,11 @@ export async function POST(req: Request) {
     const parsed = parseLocationCsv(text);
     const { rows, unresolved } = await resolveRows(parsed.rows);
     const result = importCheckins(rows);
-    return NextResponse.json({ ...result, skipped: parsed.skipped + unresolved, autoTrips: syncAutoTrips() });
+    await repairUnknownCheckins(reverseGeocode, 40); // fix "Unknown" places right away, no button needed
+    return NextResponse.json({ ...result, skipped: parsed.skipped + unresolved, autoTrips: refreshDerived().autoTrips });
   }
   const parsed = z.array(Row).max(50000).safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues.slice(0, 5) }, { status: 400 });
   const result = importCheckins(parsed.data);
-  return NextResponse.json({ ...result, autoTrips: syncAutoTrips() });
+  return NextResponse.json({ ...result, autoTrips: refreshDerived().autoTrips });
 }

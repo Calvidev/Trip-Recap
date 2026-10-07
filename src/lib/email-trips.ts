@@ -1,9 +1,11 @@
 import "server-only";
+import { refreshDerived } from "./refresh";
 import { airport } from "./airports";
 import { geocode } from "./geocode";
 import { claudeEnabled, extractFromJsonLd, extractWithClaude, type Segment } from "./extract";
 import { createTrip, findSameFlight, type TripPayload } from "./trips";
-import { replaceGuessesWithRealFlights, syncAutoTrips } from "./autotrips";
+import { replaceGuessesWithRealFlights } from "./autotrips";
+
 import type { Place } from "./types";
 
 /** Booking emails → trips. Shared by email forwarding and the Gmail API import. */
@@ -74,7 +76,7 @@ export async function tripsFromEmail(mail: EmailInput, source: string): Promise<
   }
   if (res.added) {
     replaceGuessesWithRealFlights();
-    syncAutoTrips();
+    refreshDerived();
   }
   return res;
 }

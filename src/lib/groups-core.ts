@@ -18,26 +18,46 @@ export interface SuggestedGroup {
   tripIds: number[];
 }
 
+export interface GroupSuggestions {
+  groups: SuggestedGroup[]; // new journeys
+  extend: { groupId: number; tripIds: number[] }[]; // new legs of a journey that's already a group
+}
+
 const HOME_KM = 80;
 
-export function suggestGroups(trips: Trip[], home: Home, today: string): SuggestedGroup[] {
+export function suggestGroups(trips: Trip[], home: Home, today: string): GroupSuggestions {
   const atHome = (p: { lat: number; lon: number }) => haversineKm(p.lat, p.lon, home.lat, home.lon) <= HOME_KM;
   const sorted = trips
     .filter((t) => t.departDate <= today)
     .sort((a, b) => a.departDate.localeCompare(b.departDate) || (a.departTime ?? "").localeCompare(b.departTime ?? "") || a.id - b.id);
 
-  const out: SuggestedGroup[] = [];
+  const groups: SuggestedGroup[] = [];
+  const extend = new Map<number, number[]>();
   let cur: Trip[] = [];
+  let open: number | null = null; // a group whose journey hasn't come home yet
   const close = () => {
-    if (cur.length >= 2) out.push({ name: nameFor(cur, home), tripIds: cur.map((t) => t.id) });
+    if (cur.length >= 2) groups.push({ name: nameFor(cur, home), tripIds: cur.map((t) => t.id) });
     cur = [];
   };
 
   for (const t of sorted) {
-    if (t.groupId != null) {
-      close(); // already grouped by you: never regroup, and it ends any open journey
+    if (t.noGroup) {
+      close(); // you took this one out of a group: leave it, and it ends any open journey
+      open = null;
       continue;
     }
+    if (t.groupId != null) {
+      close(); // already grouped: never regroup
+      open = atHome(t.dest) ? null : t.groupId;
+      continue;
+    }
+    if (open != null && !(atHome(t.origin) && !atHome(t.dest))) {
+      // Still on a trip that's already a group (e.g. the flight home came in later).
+      extend.set(open, [...(extend.get(open) ?? []), t.id]);
+      if (atHome(t.dest)) open = null;
+      continue;
+    }
+    open = null;
     if (atHome(t.origin) && !atHome(t.dest)) {
       close(); // leaving home starts a new journey (even if the last one never "came back")
       cur = [t];
@@ -47,7 +67,7 @@ export function suggestGroups(trips: Trip[], home: Home, today: string): Suggest
     }
   }
   close(); // still away: an ongoing journey
-  return out;
+  return { groups, extend: [...extend].map(([groupId, tripIds]) => ({ groupId, tripIds })) };
 }
 
 function nameFor(legs: Trip[], home: Home): string {

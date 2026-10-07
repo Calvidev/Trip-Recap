@@ -112,12 +112,11 @@ function tripsGeo(trips: Trip[], sel: Set<number>): GeoJSON.FeatureCollection {
 }
 
 function citiesGeo(cities: PlaceTotal[]): GeoJSON.FeatureCollection {
-  const max = Math.max(1, ...cities.map((c) => c.nights));
   return {
     type: "FeatureCollection",
     features: cities.map((c) => ({
       type: "Feature",
-      properties: { key: c.key, label: c.label, country: c.country, nights: c.nights, days: c.days, r: 3 + 9 * Math.sqrt(c.nights / max) },
+      properties: { key: c.key, label: c.label.replace(" (city unknown)", ""), country: c.country, nights: c.nights, days: c.days },
       geometry: { type: "Point", coordinates: [c.lon, c.lat] },
     })),
   };
@@ -136,12 +135,11 @@ function addOverlay(map: maplibregl.Map) {
     paint: { "line-color": ["get", "color"], "line-width": ["case", ["get", "on"], 3, 1.8], "line-dasharray": [1.5, 2], "line-opacity": opacity(1, 0.15, 0.9) } });
   // Wide invisible line so thin arcs are easy to tap on a phone.
   map.addLayer({ id: "trips-hit", type: "line", source: "trips", paint: { "line-color": "#000", "line-width": 18, "line-opacity": 0 } });
-  map.addLayer({ id: "cities-halo", type: "circle", source: "cities",
-    paint: { "circle-radius": ["*", ["get", "r"], 2.2], "circle-color": "#4f8cff", "circle-opacity": 0.12, "circle-blur": 0.8 } });
+  // Small uniform dots: where you've been, not how long (the Places tab shows time).
   map.addLayer({ id: "cities", type: "circle", source: "cities",
-    paint: { "circle-radius": ["get", "r"], "circle-color": "#4f8cff", "circle-opacity": 0.85, "circle-stroke-color": "#e8ecf3", "circle-stroke-width": 1.2 } });
+    paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 1, 2.5, 6, 4.5], "circle-color": "#e8ecf3", "circle-stroke-color": "#4f8cff", "circle-stroke-width": 1.5 } });
   map.addLayer({ id: "cities-label", type: "symbol", source: "cities", minzoom: 2.5,
-    layout: { "text-field": ["get", "label"], "text-font": ["Noto Sans Regular"], "text-size": 11, "text-offset": [0, 1.3], "text-anchor": "top", "text-optional": true },
+    layout: { "text-field": ["get", "label"], "text-font": ["Noto Sans Regular"], "text-size": 11, "text-offset": [0, 0.9], "text-anchor": "top", "text-optional": true },
     paint: { "text-color": "#e8ecf3", "text-halo-color": C.ocean, "text-halo-width": 1.2 } });
 }
 
@@ -241,12 +239,14 @@ export default function MapView({ trips, cities, selectedIds, onSelect, bottomIn
     if (!sel.size) cities.forEach((c) => pts.push([c.lon, c.lat]));
     if (!pts.length) return;
     const h = map.getContainer().clientHeight, w = map.getContainer().clientWidth;
-    const padding = { top: 70, left: Math.min(50, w / 8), right: Math.min(50, w / 8), bottom: Math.min(bottomInset + 20, h * 0.7) };
+    const padding = { top: 70, left: Math.min(50, w / 8), right: Math.min(50, w / 8), bottom: Math.min(bottomInset + 20, h * 0.8) };
     if (globe) {
       // On a globe, "fit the bounding box" picks odd centres for wide spreads (Mexico + Europe).
       // Aim at the geographic middle of the points and zoom out by how far they spread.
       const { center, radiusKm } = sphericalCenter(pts);
-      const zoom = Math.max(0.4, Math.min(sel.size ? 6 : 5, Math.log2(28000 / Math.max(radiusKm, 50)) - 1.6));
+      // Tuned on a phone (~380px of map); bigger screens zoom in so the globe fills the space.
+      const room = Math.min(w - padding.left - padding.right, h - padding.top - padding.bottom);
+      const zoom = Math.max(0.4, Math.min(sel.size ? 6 : 5, Math.log2(28000 / Math.max(radiusKm, 50)) - 1.6 + Math.log2(Math.max(0.6, room / 340))));
       map.easeTo({ center, zoom, padding, duration: 900 });
     } else {
       const b = new maplibregl.LngLatBounds(pts[0], pts[0]);

@@ -26,6 +26,7 @@ export interface Trip {
   durationMin: number | null;
   source: "manual" | "gmail" | string;
   groupId: number | null;
+  noGroup?: boolean; // you took it out of a group: auto-grouping leaves it alone
 }
 
 /** A named set of trips, e.g. "Europe 2026" (out, the legs in between, and back). */

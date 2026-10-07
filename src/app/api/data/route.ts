@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
+import { refreshDerived } from "@/lib/refresh";
 import { listCheckins, listTrips, removeBadCheckins } from "@/lib/trips";
 import { listGroups } from "@/lib/groups";
-import { syncAutoTrips } from "@/lib/autotrips";
+
 
 let cleaned = false;
 
@@ -11,7 +12,8 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   if (!cleaned) {
     cleaned = true;
-    if (removeBadCheckins() > 0) syncAutoTrips(); // drops auto trips that came from bad rows
+    removeBadCheckins();
+    refreshDerived(); // once per start: guessed trips and groups for data from older versions
   }
   return NextResponse.json({ trips: listTrips(), checkins: listCheckins(), groups: listGroups() });
 }

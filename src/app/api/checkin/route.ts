@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
+import { refreshDerived } from "@/lib/refresh";
 import { z } from "zod";
 import { reverseGeocode } from "@/lib/geocode";
 import { addCheckin } from "@/lib/trips";
-import { syncAutoTrips } from "@/lib/autotrips";
+
 import { isValidCoord } from "@/lib/csv";
 
 export const dynamic = "force-dynamic";
@@ -42,6 +43,6 @@ export async function POST(req: Request) {
   const time = p.data.time ? p.data.time.slice(0, 5).padStart(5, "0") : null;
   const where = p.data.city && p.data.country ? { city: p.data.city, country: p.data.country.toUpperCase() } : await reverseGeocode(lat, lon);
   const c = addCheckin({ date, time, lat, lon, ...where, source: p.data.source ?? "shortcut" });
-  syncAutoTrips();
+  refreshDerived();
   return NextResponse.json({ ok: true, message: `Logged ${c.city}, ${c.country} for ${c.date}`, checkin: c }, { status: 201 });
 }

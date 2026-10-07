@@ -2,12 +2,16 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import TripForm from "./TripForm";
+import TripDetail from "./TripDetail";
+import StayForm from "./StayForm";
+import { cityLabel } from "./PlacesPanel";
 import TripsPanel from "./TripsPanel";
 import PlacesPanel from "./PlacesPanel";
 import StatsPanel from "./StatsPanel";
 import SettingsPanel from "./SettingsPanel";
 import { buildDayLog, totals } from "@/lib/stays";
-import { localToday } from "@/lib/format";
+import { fmtDate, localToday } from "@/lib/format";
+import { flagEmoji } from "@/lib/geo";
 import type { Checkin, Trip, TripGroup } from "@/lib/types";
 
 const MapView = dynamic(() => import("./MapView"), { ssr: false, loading: () => <div className="h-full w-full bg-bg" /> });
@@ -47,6 +51,15 @@ export default function App() {
   const [year, setYear] = useState<number | "all">("all");
   const [tab, setTab] = useState<Tab>("trips");
   const [editing, setEditing] = useState<Partial<Trip> | null>(null);
+  const [viewing, setViewing] = useState<Trip | null>(null);
+  const [addMode, setAddMode] = useState<"trip" | "stay">("trip");
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const say = useCallback((msg: string) => {
+    setToast(msg);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 2600);
+  }, []);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
 
@@ -67,6 +80,14 @@ export default function App() {
     setLoaded(true);
   }, []);
 
+  // Stay current on its own: new check-ins, forwarded emails, auto-detected trips.
+  useEffect(() => {
+    const onVisible = () => document.visibilityState === "visible" && load();
+    document.addEventListener("visibilitychange", onVisible);
+    const t = setInterval(() => document.visibilityState === "visible" && load(), 60000);
+    return () => { document.removeEventListener("visibilitychange", onVisible); clearInterval(t); };
+  }, [load]);
+
   useEffect(() => {
     load();
     const p = new URLSearchParams(location.search);
@@ -85,9 +106,19 @@ export default function App() {
   const tot = useMemo(() => totals(log, range[0], range[1]), [log, range[0], range[1]]); // eslint-disable-line react-hooks/exhaustive-deps
   const visibleTrips = useMemo(() => trips.filter((t) => t.departDate >= range[0] && t.departDate <= range[1]), [trips, range[0], range[1]]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const saved = () => { setEditing(null); load(); };
-  const open = (t: Trip) => { setSelectedId(t.id); setEditing(t); };
-  const add = () => { setSelectedId(null); setEditing({}); };
+  // Where you are now: the latest stay (all time), e.g. "Livonia 🇺🇸 since Sep 28".
+  const allTot = useMemo(() => totals(log), [log]);
+  const lastDay = log[log.length - 1];
+  const now = lastDay?.night ? allTot.stays[0] : null;
+
+  const saved = (msg = "Saved") => { setEditing(null); setViewing(null); setSelectedId(null); load(); say(msg); };
+  const open = (t: Trip) => { setSelectedId(t.id); setViewing(t); if (snap === "full") setSnap("half"); };
+  const add = () => { setSelectedId(null); setViewing(null); setAddMode("trip"); setEditing({}); };
+  const closeSheets = () => { setEditing(null); setViewing(null); setSelectedId(null); };
+  async function deleteTrip(t: Trip) {
+    await fetch(`/api/trips/${t.id}`, { method: "DELETE" });
+    saved("Trip deleted");
+  }
 
   // ----- sheet dragging (phones) -----
   function onPointerDown(e: React.PointerEvent) {
@@ -135,7 +166,7 @@ export default function App() {
           cities={tot.cities}
           selectedIds={selectedId != null ? [selectedId] : focusIds}
           onSelect={open}
-          bottomInset={desktop ? 0 : Math.min(sheetH, heights.half)}
+          bottomInset={desktop ? 0 : viewing && !editing ? Math.round(vh * 0.72) : Math.min(sheetH, heights.half)}
         />
       </div>
 
@@ -166,7 +197,10 @@ export default function App() {
             <div className="min-w-0 flex-1">
               <h1 className="text-[22px] font-bold leading-tight tracking-tight">Trip Recap</h1>
               <p className="truncate text-[13px] text-muted">
-                {visibleTrips.length} trips · {tot.countries.length} countries · {tot.cities.length} cities
+                {now ? (
+                  <>📍 {cityLabel(now.place.city).name} {flagEmoji(now.place.country)} <span className="opacity-70">since {fmtDate(now.from, { day: "numeric", month: "short" })}</span></>
+                ) : lastDay ? "✈️ In transit" : `${visibleTrips.length} trips`}
+                <span className="opacity-70"> · {tot.countries.length} countries</span>
               </p>
             </div>
             <button
@@ -199,40 +233,77 @@ export default function App() {
           style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 28px)" }}
         >
           {!loaded ? (
-            <p className="text-muted">Loading…</p>
+            <div className="space-y-3" aria-label="Loading">
+              {[0, 1, 2].map((i) => <div key={i} className="h-24 animate-pulse rounded-2xl bg-panel-2" style={{ animationDelay: `${i * 120}ms` }} />)}
+            </div>
           ) : tab === "trips" ? (
-            <TripsPanel trips={visibleTrips} groups={groups} onOpen={open} onChanged={load} onFocus={(ids) => { setFocusIds(ids); if (ids && snap === "full") setSnap("half"); }} />
+            <TripsPanel trips={visibleTrips} groups={groups} onOpen={open} onChanged={() => { load(); say("Groups updated"); }} onFocus={(ids) => { setFocusIds(ids); if (ids && snap === "full") setSnap("half"); }} />
           ) : tab === "places" ? (
-            <PlacesPanel totals={tot} log={log} isAllTime={year === "all"} />
+            <PlacesPanel totals={tot} log={log} year={year} />
           ) : tab === "stats" ? (
             <StatsPanel trips={visibleTrips} />
           ) : (
-            <SettingsPanel checkins={checkins} onChanged={load} flash={flash} />
+            <SettingsPanel checkins={checkins} trips={trips} onChanged={load} say={say} flash={flash} />
           )}
         </div>
       </section>
 
+      {/* Trip detail: the map behind it shows the route */}
+      {viewing && !editing && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center md:items-start md:justify-end md:p-6 md:pt-20" onClick={closeSheets}>
+          <div
+            className="w-full overflow-y-auto overscroll-contain rounded-t-[28px] border border-line bg-panel p-5 shadow-[0_-12px_40px_rgba(0,0,0,0.5)] md:max-w-sm md:rounded-3xl"
+            style={{ maxHeight: desktop ? "92dvh" : vh * 0.72, paddingBottom: "calc(env(safe-area-inset-bottom) + 16px)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <TripDetail
+              trip={viewing}
+              group={groups.find((g) => g.id === viewing.groupId) ?? null}
+              onClose={closeSheets}
+              onEdit={() => setEditing(viewing)}
+              onReturn={() => {
+                setViewing(null);
+                setEditing({ mode: viewing.mode, origin: viewing.dest, dest: viewing.origin, airline: viewing.airline, departDate: viewing.arriveDate ?? viewing.departDate });
+              }}
+              onDelete={() => deleteTrip(viewing)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div className="pointer-events-none fixed inset-x-0 z-[60] flex justify-center px-4" style={{ top: "calc(max(env(safe-area-inset-top), 12px) + 52px)" }}>
+          <div className="rounded-full border border-line bg-panel-2/95 px-4 py-2 text-sm font-medium shadow-lg backdrop-blur">{toast}</div>
+        </div>
+      )}
+
       {/* Add / edit sheet */}
       {editing && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 md:items-center" onClick={() => { setEditing(null); setSelectedId(null); }}>
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 md:items-center" onClick={closeSheets}>
           <div
             className="w-full overflow-y-auto overscroll-contain rounded-t-[28px] border border-line bg-panel p-5 md:max-w-lg md:rounded-3xl"
             style={{ maxHeight: desktop ? "92dvh" : vh - 40, paddingBottom: "calc(env(safe-area-inset-bottom) + 20px)" }}
             onClick={(e) => e.stopPropagation()}
           >
-            <TripForm key={editing.id ?? "new"} initial={editing} onSaved={saved} onClose={() => { setEditing(null); setSelectedId(null); }} />
-            {editing.id && (
-              <button
-                className="btn-ghost mt-2 w-full"
-                onClick={() =>
-                  setEditing({
-                    mode: editing.mode, origin: editing.dest, dest: editing.origin, airline: editing.airline,
-                    departDate: editing.arriveDate ?? editing.departDate,
-                  })
-                }
-              >
-                ↩︎ Log the return trip
-              </button>
+            {/* A brand-new entry can be a trip or a stay ("I was here") */}
+            {!editing.id && !editing.origin && (
+              <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl border border-line bg-panel-2 p-1">
+                {([["trip", "✈️ Trip"], ["stay", "📍 I was here"]] as const).map(([m, label]) => (
+                  <button key={m} onClick={() => setAddMode(m)} className={`rounded-lg py-2 text-sm font-medium ${addMode === m ? "bg-fg text-bg" : "text-muted"}`}>{label}</button>
+                ))}
+              </div>
+            )}
+            {addMode === "stay" && !editing.id && !editing.origin ? (
+              <>
+                <div className="mb-3 flex items-center justify-between">
+                  <h2 className="text-lg font-semibold">Add a stay</h2>
+                  <button onClick={closeSheets} className="px-2 text-2xl leading-none text-muted" aria-label="Close">×</button>
+                </div>
+                <StayForm onSaved={() => saved("Stay added")} />
+              </>
+            ) : (
+              <TripForm key={editing.id ?? "new"} initial={editing} onSaved={() => saved(editing.id ? "Trip updated" : "Trip added")} onClose={() => (viewing ? setEditing(null) : closeSheets())} />
             )}
           </div>
         </div>

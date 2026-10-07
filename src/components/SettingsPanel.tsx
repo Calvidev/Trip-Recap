@@ -1,28 +1,99 @@
 "use client";
 import { useEffect, useState } from "react";
-import PlaceInput from "./PlaceInput";
 import { fmtDate, localToday } from "@/lib/format";
 import { countryName, flagEmoji } from "@/lib/geo";
 import { parseLocationCsv } from "@/lib/csv";
 import { isFlightyCsv } from "@/lib/flighty";
-import type { Checkin, Place } from "@/lib/types";
+import type { Checkin, Trip } from "@/lib/types";
 
 interface GmailStatus { configured: boolean; connected: boolean; lastSync: string | null; claude: boolean }
 
-export default function SettingsPanel({ checkins, onChanged, flash }: { checkins: Checkin[]; onChanged: () => void; flash?: string | null }) {
+type Tone = "ok" | "warn" | "off";
+const DOT: Record<Tone, string> = { ok: "bg-drive", warn: "bg-amber-400", off: "bg-muted/40" };
+const daysAgo = (date: string) => Math.round((Date.parse(localToday()) - Date.parse(date)) / 86400000);
+const ago = (date: string) => { const d = daysAgo(date); return d <= 0 ? "today" : d === 1 ? "yesterday" : `${d} days ago`; };
+
+interface Props { checkins: Checkin[]; trips: Trip[]; onChanged: () => void; say: (msg: string) => void; flash?: string | null }
+
+export default function SettingsPanel({ checkins, trips, onChanged, say, flash }: Props) {
+  const [inbound, setInbound] = useState<{ address: string | null; emails: InboundLog[] } | null>(null);
+  useEffect(() => {
+    const load = () => fetch("/api/inbound-email").then((r) => r.json()).then(setInbound).catch(() => {});
+    load();
+    const t = setInterval(load, 15000); // new emails (and Gmail's code) show up while you're here
+    return () => clearInterval(t);
+  }, []);
+
+  // Status of each automatic source, so you can tell at a glance that things are flowing.
+  const lastNight = checkins.filter((c) => c.source === "shortcut").sort((a, b) => b.date.localeCompare(a.date))[0];
+  const nightTone: Tone = !lastNight ? "off" : daysAgo(lastNight.date) <= 2 ? "ok" : "warn";
+  const lastMail = inbound?.emails.find((e) => e.status !== "verification");
+  const mailTone: Tone = !inbound?.emails.length ? "off" : lastMail?.status === "error" ? "warn" : "ok";
+  const flighty = trips.filter((t) => t.source === "flighty").length;
+
   return (
     <div className="space-y-4">
       {flash && <div className="card text-sm">{flash === "connected" ? "✅ Gmail connected. Hit “Sync now”." : `⚠️ Gmail: ${flash}`}</div>}
-      <EmailForwardingCard onChanged={onChanged} />
-      <GmailCard onChanged={onChanged} />
-      <ManualCheckin onChanged={onChanged} />
-      <CsvImport onChanged={onChanged} />
-      <ShortcutCard />
-      <CheckinList checkins={checkins} onChanged={onChanged} />
-      <div className="card text-sm">
-        <div className="font-semibold mb-1">Backup</div>
-        <a className="text-accent" href="/api/data" download="trip-recap.json">Download all data as JSON</a>
-      </div>
+
+      <section className="space-y-2">
+        <h3 className="px-1 text-xs font-semibold uppercase tracking-wider text-muted">Sources · update on their own</h3>
+        <div className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-panel-2">
+          <Source
+            icon="🌙" title="Nightly check-in" tone={nightTone}
+            status={lastNight ? `Last ${ago(lastNight.date)} · ${lastNight.city}` : "Not set up yet"}
+            hint={nightTone === "warn" ? "No check-in for a few days. Is the Shortcut automation still on?" : undefined}
+          >
+            <ShortcutSteps />
+          </Source>
+          <Source
+            icon="📨" title="Email forwarding" tone={mailTone}
+            status={lastMail ? `Last ${ago((lastMail.receivedAt ?? "").slice(0, 10))} · ${STATUS[lastMail.status]?.[1] ?? lastMail.status}` : inbound?.address ? `Forward bookings to ${inbound.address}` : "Not set up yet"}
+            always={<VerificationCode emails={inbound?.emails ?? []} />}
+          >
+            <EmailLog data={inbound} />
+          </Source>
+          <Source icon="✈️" title="Flighty" tone={flighty ? "ok" : "off"} status={flighty ? `${flighty} flights imported` : "Import your Flighty export"}>
+            <p className="text-sm text-muted">In Flighty: Settings → Export flights → share the CSV, then import it here. Importing again only adds new flights and updates times.</p>
+          </Source>
+        </div>
+        <CsvImport onChanged={onChanged} say={say} />
+      </section>
+
+      <details className="group rounded-2xl border border-line bg-panel-2 [&_summary::-webkit-details-marker]:hidden">
+        <summary className="flex cursor-pointer items-center justify-between px-4 py-3 text-sm font-medium">
+          Check-ins <span className="text-muted">{checkins.length} · <span className="inline-block transition group-open:rotate-90">›</span></span>
+        </summary>
+        <div className="px-4 pb-3"><CheckinList checkins={checkins} onChanged={onChanged} /></div>
+      </details>
+
+      <details className="group rounded-2xl border border-line bg-panel-2 [&_summary::-webkit-details-marker]:hidden">
+        <summary className="flex cursor-pointer items-center justify-between px-4 py-3 text-sm font-medium">
+          Advanced <span className="inline-block text-muted transition group-open:rotate-90">›</span>
+        </summary>
+        <div className="space-y-3 px-4 pb-4">
+          <GmailCard onChanged={onChanged} />
+          <a className="block text-sm text-accent" href="/api/data" download="trip-recap.json">Download a backup of all data (JSON)</a>
+        </div>
+      </details>
+    </div>
+  );
+}
+
+function Source({ icon, title, status, tone, hint, always, children }: { icon: string; title: string; status: string; tone: Tone; hint?: string; always?: React.ReactNode; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="px-4 py-3">
+      <button onClick={() => setOpen(!open)} className="flex w-full items-center gap-3 text-left">
+        <span className="text-xl">{icon}</span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-2 font-medium">{title}<span className={`h-2 w-2 rounded-full ${DOT[tone]}`} /></span>
+          <span className="block truncate text-xs text-muted">{status}</span>
+        </span>
+        <span className="text-xs text-accent">{open ? "Hide" : "How it works"}</span>
+      </button>
+      {hint && <p className="mt-2 rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-200">{hint}</p>}
+      {always}
+      {open && <div className="mt-3">{children}</div>}
     </div>
   );
 }
@@ -38,59 +109,44 @@ const STATUS: Record<string, [string, string]> = {
   error: ["❌", "Error"],
 };
 
-function EmailForwardingCard({ onChanged }: { onChanged: () => void }) {
-  const [data, setData] = useState<{ address: string | null; emails: InboundLog[] } | null>(null);
-  const load = () => fetch("/api/inbound-email").then((r) => r.json()).then(setData).catch(() => {});
-  useEffect(() => {
-    load();
-    const t = setInterval(load, 15000); // pick up new emails (and the Gmail code) while you're here
-    return () => clearInterval(t);
-  }, []);
-  useEffect(() => {
-    if (data?.emails.some((e) => e.status === "added")) onChanged();
-  }, [data?.emails[0]?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-
+function VerificationCode({ emails }: { emails: InboundLog[] }) {
   // Gmail's confirmation code is only useful for a little while after it arrives.
-  const verification = data?.emails.find((e) => e.status === "verification" && Date.now() - Date.parse(e.receivedAt + "Z") < 2 * 86400000);
-  const code = verification && (verification.subject?.match(/#(\d{6,})/)?.[1] ?? verification.detail?.match(/(?:code|código)\D{0,20}(\d{6,})/i)?.[1]);
-  const link = verification?.detail?.match(/https:\/\/mail(?:-settings)?\.google\.com\/\S+/)?.[0];
-
+  const v = emails.find((e) => e.status === "verification" && Date.now() - Date.parse(e.receivedAt + "Z") < 2 * 86400000);
+  if (!v) return null;
+  const code = v.subject?.match(/#(\d{6,})/)?.[1] ?? v.detail?.match(/(?:code|código)\D{0,20}(\d{6,})/i)?.[1];
+  const link = v.detail?.match(/https:\/\/mail(?:-settings)?\.google\.com\/\S+/)?.[0];
   return (
-    <div className="card space-y-3 text-sm">
-      <div className="font-semibold">📨 Email forwarding</div>
+    <div className="mt-3 rounded-xl border border-accent/40 bg-accent/10 p-3 text-sm">
+      <div className="font-semibold">🔑 Gmail confirmation code</div>
+      {code ? <p className="mt-1 select-all font-mono text-lg">{code}</p> : <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap text-xs text-muted">{v.detail}</pre>}
+      {link && <a href={link} target="_blank" rel="noreferrer noopener" className="mt-1 block truncate text-accent">Or open the confirmation link</a>}
+    </div>
+  );
+}
+
+function EmailLog({ data }: { data: { address: string | null; emails: InboundLog[] } | null }) {
+  const emails = (data?.emails ?? []).filter((e) => e.status !== "verification").slice(0, 8);
+  return (
+    <div className="space-y-2 text-sm">
       <p className="text-muted">
-        Forward booking emails to {data?.address ? <b className="text-fg">{data.address}</b> : "your Trip Recap address"} (or let a Gmail filter do it) and the trips appear here, like Flighty.
-        {!data?.address && <> Set it up with <code>docs/EMAIL_FORWARDING.md</code>.</>}
+        Forward booking emails to {data?.address ? <b className="text-fg">{data.address}</b> : "your Trip Recap address"}, or let a Gmail filter do it. Flights, trains and buses are added on their own, and ones you already have are skipped. Setup: <code>docs/EMAIL_FORWARDING.md</code>.
       </p>
-      {verification && (
-        <div className="rounded-xl border border-accent/40 bg-accent/10 p-3">
-          <div className="font-semibold">🔑 Gmail confirmation received</div>
-          {code ? (
-            <p className="mt-1">Code: <span className="select-all font-mono text-base text-fg">{code}</span></p>
-          ) : (
-            <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap text-xs text-muted">{verification.detail}</pre>
-          )}
-          {link && <a href={link} target="_blank" rel="noreferrer noopener" className="mt-1 block truncate text-accent">Or open the confirmation link</a>}
-        </div>
-      )}
-      {data && data.emails.length > 0 ? (
+      {emails.length ? (
         <ul className="divide-y divide-line">
-          {data.emails.filter((e) => e.status !== "verification").slice(0, 8).map((e) => (
+          {emails.map((e) => (
             <li key={e.id} className="py-2">
               <div className="flex items-center gap-2">
                 <span title={STATUS[e.status]?.[1]}>{STATUS[e.status]?.[0] ?? "•"}</span>
                 <span className="min-w-0 flex-1 truncate">{e.subject || "(no subject)"}</span>
                 <span className="shrink-0 text-xs text-muted">{new Date(e.receivedAt + "Z").toLocaleDateString(undefined, { day: "numeric", month: "short" })}</span>
               </div>
-              <div className="pl-6 text-xs text-muted">
-                {STATUS[e.status]?.[1]}{e.tripsAdded > 1 ? ` (${e.tripsAdded})` : ""}{e.detail && e.status !== "added" ? ` · ${e.detail}` : ""}
-              </div>
+              <div className="pl-6 text-xs text-muted">{STATUS[e.status]?.[1]}{e.detail && e.status !== "added" ? ` · ${e.detail}` : ""}</div>
             </li>
           ))}
         </ul>
-      ) : data ? (
+      ) : (
         <p className="text-xs text-muted">No emails received yet.</p>
-      ) : null}
+      )}
     </div>
   );
 }
@@ -117,15 +173,15 @@ function GmailCard({ onChanged }: { onChanged: () => void }) {
   }
 
   return (
-    <div className="card space-y-3 text-sm">
+    <div className="space-y-3 text-sm">
       <div className="flex items-center justify-between">
-        <div className="font-semibold">📧 Import from Gmail</div>
+        <div className="font-semibold">📧 Search Gmail for past trips</div>
         {s?.connected && <span className="text-xs text-drive">connected</span>}
       </div>
       {!s ? (
         <p className="text-muted">Loading…</p>
       ) : !s.configured ? (
-        <p className="text-muted">Set <code>GOOGLE_CLIENT_ID</code> and <code>GOOGLE_CLIENT_SECRET</code> on the server to enable this (see README).</p>
+        <p className="text-muted">Searching your whole inbox needs a Google Cloud login set up on the server (see README). Email forwarding above is the simpler option.</p>
       ) : !s.connected ? (
         <a href="/api/gmail/connect" className="btn-primary w-full">Connect Gmail (read-only)</a>
       ) : (
@@ -145,88 +201,42 @@ function GmailCard({ onChanged }: { onChanged: () => void }) {
   );
 }
 
-function ManualCheckin({ onChanged }: { onChanged: () => void }) {
-  const [place, setPlace] = useState<Place | null>(null);
-  const [date, setDate] = useState(localToday());
-  const [saving, setSaving] = useState(false);
-  async function save() {
-    if (!place) return;
-    setSaving(true);
-    await fetch("/api/checkin", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lat: place.lat, lon: place.lon, city: place.city, country: place.country, date, source: "manual" }),
-    });
-    setSaving(false);
-    setPlace(null);
-    onChanged();
-  }
-  return (
-    <div className="card space-y-3 text-sm">
-      <div className="font-semibold">📍 I was here</div>
-      <p className="text-muted">Fill gaps without a trip (e.g. you were already somewhere when you started logging). You stay there until your next trip or check-in.</p>
-      <PlaceInput kind="place" value={place} onChange={setPlace} placeholder="City" />
-      <div className="flex gap-2">
-        <input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} />
-        <button onClick={save} disabled={!place || saving} className="btn-primary">Add</button>
-      </div>
-    </div>
-  );
-}
-
-function CsvImport({ onChanged }: { onChanged: () => void }) {
-  const [msg, setMsg] = useState("");
+function CsvImport({ onChanged, say }: { onChanged: () => void; say: (msg: string) => void }) {
+  const [busy, setBusy] = useState("");
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
     const text = await file.text();
-    if (isFlightyCsv(text)) {
-      setMsg("Importing your Flighty flights…");
-      const r = await fetch("/api/checkins/import", { method: "POST", headers: { "Content-Type": "text/csv" }, body: text }).then((r) => r.json());
+    const flighty = isFlightyCsv(text);
+    if (!flighty && !parseLocationCsv(text).rows.length) return say("That file isn't a Flighty export or a location history");
+    setBusy(flighty ? "Importing your flights…" : "Importing locations… (looking up places can take a minute)");
+    const r = await fetch("/api/checkins/import", { method: "POST", headers: { "Content-Type": "text/csv" }, body: text }).then((r) => r.json()).catch(() => null);
+    setBusy("");
+    if (!r || r.error) return say("⚠️ Import failed");
+    if (flighty) {
       const f = r.flighty;
-      setMsg(!f ? "⚠️ Import failed." : [
-        `✈️ ${f.added} flights added${f.updated ? `, ${f.updated} updated` : ""}${f.canceled ? `, ${f.canceled} canceled skipped` : ""}.`,
-        f.replaced ? `Replaced ${f.replaced} guessed trips with the real flights.` : "",
-        f.autoTrips?.added ? `Added ${f.autoTrips.added} ground legs between flights (check the mode).` : "",
-        f.unknownAirports?.length ? `Unknown airports: ${f.unknownAirports.join(", ")}.` : "",
-        "Tap ✨ Auto-group in Trips to group new journeys.",
-      ].filter(Boolean).join(" "));
-      onChanged();
-      return;
+      say(`✈️ ${f.added} new flights${f.updated ? `, ${f.updated} updated` : ""}${f.unknownAirports?.length ? ` · unknown: ${f.unknownAirports.join(", ")}` : ""}`);
+    } else {
+      say(`📍 ${r.added} new locations${r.autoTrips?.added ? ` · ${r.autoTrips.added} trips detected` : ""}`);
     }
-    const { rows } = parseLocationCsv(text);
-    if (!rows.length) return setMsg("No rows found. Expected a Flighty export or: date,lat,lon,city,country,countryCode,…");
-    setMsg(`Importing ${rows.length} locations… (cities without coordinates are looked up, this can take a minute)`);
-    const r = await fetch("/api/checkins/import", { method: "POST", headers: { "Content-Type": "text/csv" }, body: text }).then((r) => r.json());
-    setMsg(r.error ? "⚠️ Import failed." : `Added ${r.added} locations${r.duplicates ? `, ${r.duplicates} already there` : ""}${r.skipped ? `, ${r.skipped} lines skipped` : ""}.${r.autoTrips?.added ? ` Detected ${r.autoTrips.added} trips.` : ""}`);
     onChanged();
   }
   return (
-    <div className="card space-y-2 text-sm">
-      <div className="font-semibold">🗂️ Import a CSV</div>
-      <p className="text-muted">
-        <b className="text-fg">Flighty export</b> (Flighty → Settings → Export flights): your flights with real times, airlines and seats.
-        Or a <b className="text-fg">location history</b> with one place per line: <code className="text-fg">date,lat,lon,city,country,countryCode</code>, like the n8n <code className="text-fg">ubicaciones.csv</code>.
-        Importing the same file again updates it and won&apos;t create duplicates.
-      </p>
-      <label className="btn-ghost w-full cursor-pointer">
-        Choose CSV file
-        <input type="file" accept=".csv,text/csv,text/plain" className="hidden" onChange={onFile} />
-      </label>
-      {msg && <p className="text-muted">{msg}</p>}
-    </div>
+    <label className={`btn-ghost w-full cursor-pointer ${busy ? "pointer-events-none opacity-70" : ""}`}>
+      {busy || "⬆️ Import Flighty or location file"}
+      <input type="file" accept=".csv,text/csv,text/plain" className="hidden" onChange={onFile} />
+    </label>
   );
 }
 
-function ShortcutCard() {
+function ShortcutSteps() {
   const [origin, setOrigin] = useState("");
   useEffect(() => setOrigin(location.origin), []);
   return (
-    <div className="card space-y-2 text-sm">
-      <div className="font-semibold">🌙 Nightly iPhone check-in</div>
+    <div className="space-y-2 text-sm">
       <p className="text-muted">
-        A Shortcuts automation posts your location every night, so days per city are exact even without trips. Set it up once:
+        Every night your iPhone sends its location, so your days per city stay exact and trips are detected on their own. Set it up once:
       </p>
       <ol className="list-decimal space-y-1 pl-5 text-muted">
         <li>Shortcuts → Automation → <b>+</b> → <b>Time of Day</b> (e.g. 23:00, Daily) → <b>Run Immediately</b>.</li>
@@ -235,7 +245,7 @@ function ShortcutCard() {
         <li>Headers: <code className="text-fg">Authorization</code> = <code className="text-fg">Bearer YOUR_APP_TOKEN</code>.</li>
         <li>Request Body <b>JSON</b>: <code className="text-fg">latitude</code> = Current Location › Latitude, <code className="text-fg">longitude</code> = Current Location › Longitude, <code className="text-fg">date</code> = Current Date formatted <code className="text-fg">yyyy-MM-dd</code>.</li>
       </ol>
-      <p className="text-muted">Full guide with screenshots-style steps: <code>docs/IPHONE_SHORTCUT.md</code>.</p>
+      <p className="text-muted">Full guide: <code>docs/IPHONE_SHORTCUT.md</code>.</p>
     </div>
   );
 }
@@ -276,11 +286,10 @@ function CheckinList({ checkins, onChanged }: { checkins: Checkin[]; onChanged: 
   }
   const unknown = checkins.filter((c) => c.city === "Unknown" || c.country === "??").length;
   return (
-    <div className="card text-sm">
-      <div className="mb-2 font-semibold">Recent check-ins</div>
+    <div className="text-sm">
       {unknown > 0 && <RepairUnknown count={unknown} onChanged={onChanged} />}
       <ul className="divide-y divide-line">
-        {checkins.slice(0, 30).map((c) => (
+        {checkins.slice(0, 20).map((c) => (
           <li key={c.id} className="flex items-center gap-2 py-2">
             <span>{flagEmoji(c.country)}</span>
             <span className="flex-1 truncate">{c.city}, {countryName(c.country)}</span>

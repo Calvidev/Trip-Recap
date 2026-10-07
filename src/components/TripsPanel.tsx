@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { MODE_META, fmtDate, fmtDuration, fmtKm, localToday } from "@/lib/format";
 import { flagEmoji } from "@/lib/geo";
+import { cityLabel } from "./PlacesPanel";
 import type { Trip, TripGroup } from "@/lib/types";
 
 interface Props {
@@ -21,13 +22,12 @@ export default function TripsPanel({ trips, groups, onOpen, onChanged, onFocus }
   const [open, setOpen] = useState<number | null>(null);
   const [naming, setNaming] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState("");
 
   if (!trips.length) {
     return (
       <div className="py-10 text-center text-muted">
         <div className="text-4xl mb-2">🗺️</div>
-        No trips yet. Tap <span className="text-fg font-semibold">+</span> to log one, or import from Gmail in Settings.
+        No trips yet. Tap <span className="text-fg font-semibold">+ Add</span>, import your Flighty export in Settings, or just let the nightly check-in detect them.
       </div>
     );
   }
@@ -74,14 +74,6 @@ export default function TripsPanel({ trips, groups, onOpen, onChanged, onFocus }
     else if (name) await call("/api/groups", "POST", { name, tripIds: ids });
     stopSelecting();
   }
-  async function autoGroup() {
-    setBusy(true);
-    setMsg("");
-    const r = await fetch(`/api/groups/auto?today=${localToday()}`, { method: "POST" }).then((r) => r.json());
-    setBusy(false);
-    setMsg(r.created?.length ? `Created ${r.created.length} groups. Rename or ungroup any of them from the group card.` : "No new journeys found. Trips that leave home and come back get grouped; trips you already grouped are left alone.");
-    onChanged();
-  }
   function toggleGroup(g: TripGroup, legs: Trip[]) {
     const next = open === g.id ? null : g.id;
     setOpen(next);
@@ -98,12 +90,11 @@ export default function TripsPanel({ trips, groups, onOpen, onChanged, onFocus }
           </>
         ) : (
           <>
-            <button onClick={() => setSelecting(true)} className="chip">Select</button>
-            <button onClick={autoGroup} disabled={busy} className="chip">{busy ? "Grouping…" : "✨ Auto-group"}</button>
+            <span className="self-center text-xs text-muted">Trips are grouped automatically</span>
+            <button onClick={() => setSelecting(true)} className="chip ml-auto">Edit groups</button>
           </>
         )}
       </div>
-      {msg && <p className="-mt-2 text-xs text-muted">{msg}</p>}
 
       {[...months].map(([month, list]) => (
         <section key={month}>
@@ -169,43 +160,47 @@ export default function TripsPanel({ trips, groups, onOpen, onChanged, onFocus }
   );
 }
 
+/** Short name for a stop: the airport code, else the city ("Germany (city unknown)" → "Germany"). */
+const stopName = (p: Trip["origin"]) => p.code ?? cityLabel(p.city).name;
+
 function TripRow({ t, onTap, selecting, checked, compact }: { t: Trip; onTap: (t: Trip) => void; selecting: boolean; checked: boolean; compact?: boolean }) {
   const m = MODE_META[t.mode];
   const upcoming = t.departDate > localToday();
+  const badge = upcoming
+    ? <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-semibold text-accent">UPCOMING</span>
+    : t.source === "auto"
+      ? <span className="rounded-full bg-drive/15 px-2 py-0.5 text-[10px] font-semibold text-drive">AUTO</span>
+      : null;
   return (
-    <button onClick={() => onTap(t)} className={`card w-full text-left transition hover:border-muted/50 ${compact ? "p-3" : ""} ${checked ? "border-accent bg-accent/10" : ""}`}>
-      <div className="flex items-center gap-3">
+    <button onClick={() => onTap(t)} className={`card w-full text-left transition active:scale-[0.99] ${compact ? "p-3" : ""} ${checked ? "border-accent bg-accent/10" : ""}`}>
+      <div className="flex items-start gap-3">
         {selecting && (
-          <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border text-[11px] ${checked ? "border-accent bg-accent text-white" : "border-muted"}`}>{checked ? "✓" : ""}</span>
+          <span className={`mt-2 grid h-5 w-5 shrink-0 place-items-center rounded-full border text-[11px] ${checked ? "border-accent bg-accent text-white" : "border-muted"}`}>{checked ? "✓" : ""}</span>
         )}
-        <div className={`grid shrink-0 place-items-center rounded-xl ${compact ? "h-8 w-8 text-base" : "h-10 w-10 text-lg"}`} style={{ background: `${m.color}22` }}>
+        <div className={`grid shrink-0 place-items-center rounded-xl ${compact ? "h-9 w-9 text-base" : "h-10 w-10 text-lg"}`} style={{ background: `${m.color}22` }}>
           {m.icon}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 font-semibold">
-            <span className="truncate">
-              {t.origin.code ?? t.origin.city} <span className="text-muted">→</span> {t.dest.code ?? t.dest.city}
-            </span>
-            {upcoming && <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-semibold text-accent">UPCOMING</span>}
-            {(t.source === "gmail" || t.source === "email") && <span className="text-[10px] text-muted">via email</span>}
-            {t.source === "auto" && <span className="rounded-full bg-drive/15 px-2 py-0.5 text-[10px] font-semibold text-drive">AUTO</span>}
+          <div className="font-semibold leading-snug [overflow-wrap:anywhere]">
+            {stopName(t.origin)} <span className="text-muted">→</span> {stopName(t.dest)}
           </div>
-          {!compact && (
-            <div className="truncate text-xs text-muted">
-              {flagEmoji(t.origin.country)} {t.origin.city} → {flagEmoji(t.dest.country)} {t.dest.city}
-            </div>
-          )}
+          <div className="mt-0.5 truncate text-xs text-muted">
+            {t.origin.code
+              ? `${flagEmoji(t.origin.country)} ${cityLabel(t.origin.city).name} → ${flagEmoji(t.dest.country)} ${cityLabel(t.dest.city).name}`
+              : `${flagEmoji(t.origin.country)} → ${flagEmoji(t.dest.country)} · ${fmtKm(t.distanceKm)}`}
+          </div>
         </div>
-        <div className="text-right text-xs">
+        <div className="shrink-0 text-right text-xs">
           <div className="text-fg">{fmtDate(t.departDate, { day: "numeric", month: "short" })}</div>
           <div className="text-muted">{t.flightNumber ?? m.label}</div>
         </div>
       </div>
-      {!compact && (
-        <div className="mt-3 flex gap-4 text-xs text-muted">
-          <span>{fmtKm(t.distanceKm)}</span>
-          <span>{fmtDuration(t.durationMin)}</span>
-          {t.departTime && <span>{t.departTime}{t.arriveTime ? ` – ${t.arriveTime}` : ""}{t.arriveDate !== t.departDate ? " (+1)" : ""}</span>}
+      {!compact && (t.origin.code || t.departTime || badge || t.airline) && (
+        <div className="mt-3 flex items-center gap-3 overflow-hidden whitespace-nowrap pl-[52px] text-xs text-muted">
+          {badge}
+          {t.origin.code && <span>{fmtKm(t.distanceKm)}</span>}
+          {t.durationMin ? <span>{fmtDuration(t.durationMin)}</span> : null}
+          {t.departTime && <span>{t.departTime}{t.arriveTime ? `–${t.arriveTime}` : ""}{t.arriveDate !== t.departDate ? " +1" : ""}</span>}
           {t.airline && <span className="truncate">{t.airline}</span>}
         </div>
       )}

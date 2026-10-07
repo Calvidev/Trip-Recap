@@ -63,6 +63,7 @@ function open(): Database.Database {
   // Migrations for databases created by earlier versions.
   const cols = (db.prepare("PRAGMA table_info(trips)").all() as { name: string }[]).map((c) => c.name);
   if (!cols.includes("group_id")) db.exec("ALTER TABLE trips ADD COLUMN group_id INTEGER REFERENCES trip_groups(id) ON DELETE SET NULL");
+  if (!cols.includes("no_group")) db.exec("ALTER TABLE trips ADD COLUMN no_group INTEGER NOT NULL DEFAULT 0");
   return db;
 }
 
@@ -100,6 +101,7 @@ export function rowToTrip(r: Row): Trip {
     durationMin: (r.duration_min as number) ?? null,
     source: r.source as string,
     groupId: (r.group_id as number) ?? null,
+    noGroup: Boolean(r.no_group),
   };
 }
 

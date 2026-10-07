@@ -1,10 +1,12 @@
 import "server-only";
+import { refreshDerived } from "./refresh";
 import { db } from "./db";
 import { airport } from "./airports";
 import { airlineInfo } from "./airlines";
 import { parseFlightyCsv } from "./flighty";
 import { createTrip, findSameFlight, updateTrip, type TripPayload } from "./trips";
-import { replaceGuessesWithRealFlights, syncAutoTrips } from "./autotrips";
+import { replaceGuessesWithRealFlights } from "./autotrips";
+
 import type { Place } from "./types";
 
 export interface FlightyResult {
@@ -75,7 +77,7 @@ export function importFlighty(text: string): FlightyResult {
   }
 
   res.replaced = replaceGuessesWithRealFlights();
-  res.autoTrips = syncAutoTrips();
+  res.autoTrips = refreshDerived().autoTrips;
   return res;
 }
 

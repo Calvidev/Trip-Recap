@@ -157,15 +157,45 @@ function ShortcutCard() {
   );
 }
 
+function RepairUnknown({ count, onChanged }: { count: number; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  async function run() {
+    setBusy(true);
+    let total = 0;
+    // Each call does up to ~90 lookups (about 1.5 min); repeat until done or stuck.
+    for (let i = 0; i < 20; i++) {
+      setMsg(`Looking up places… ${total} fixed so far`);
+      const r = await fetch("/api/checkins/repair", { method: "POST" }).then((r) => r.json());
+      total += r.fixed ?? 0;
+      if (!r.remaining || !r.fixed) {
+        setMsg(r.remaining ? `Fixed ${total}. ${r.remaining} couldn't be identified (no internet or the lookup service is down?).` : `Fixed ${total} places.`);
+        break;
+      }
+    }
+    setBusy(false);
+    onChanged();
+  }
+  return (
+    <div className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
+      <p>{count} check-ins have an unknown city. Their coordinates are fine, so they can be looked up again.</p>
+      <button onClick={run} disabled={busy} className="btn-primary mt-2 w-full">{busy ? "Fixing…" : `Fix ${count} unknown places`}</button>
+      {msg && <p className="mt-2 text-muted">{msg}</p>}
+    </div>
+  );
+}
+
 function CheckinList({ checkins, onChanged }: { checkins: Checkin[]; onChanged: () => void }) {
   if (!checkins.length) return null;
   async function del(id: number) {
     await fetch(`/api/checkins/${id}`, { method: "DELETE" });
     onChanged();
   }
+  const unknown = checkins.filter((c) => c.city === "Unknown" || c.country === "??").length;
   return (
     <div className="card text-sm">
       <div className="mb-2 font-semibold">Recent check-ins</div>
+      {unknown > 0 && <RepairUnknown count={unknown} onChanged={onChanged} />}
       <ul className="divide-y divide-line">
         {checkins.slice(0, 30).map((c) => (
           <li key={c.id} className="flex items-center gap-2 py-2">

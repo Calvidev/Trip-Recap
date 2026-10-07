@@ -127,3 +127,40 @@ export function importCheckins(rows: Omit<Checkin, "id">[]): { added: number; du
   })();
   return { added, duplicates: rows.length - added };
 }
+
+const UNKNOWN_WHERE = "city IN ('Unknown', '') OR country IN ('??', '')";
+
+export function countUnknownCheckins(): number {
+  return (db().prepare(`SELECT count(*) AS n FROM checkins WHERE ${UNKNOWN_WHERE}`).get() as { n: number }).n;
+}
+
+/**
+ * Re-geocodes check-ins whose city/country is unknown (e.g. imported rows where
+ * the original lookup failed). Nearby points share one lookup (~100 m grid), and
+ * at most `limit` lookups run per call to respect Nominatim's 1 req/s policy.
+ */
+export async function repairUnknownCheckins(
+  reverse: (lat: number, lon: number) => Promise<{ city: string; country: string }>,
+  limit = 90,
+): Promise<{ fixed: number; remaining: number }> {
+  const rows = db().prepare(`SELECT id, lat, lon FROM checkins WHERE ${UNKNOWN_WHERE}`).all() as { id: number; lat: number; lon: number }[];
+  const update = db().prepare("UPDATE checkins SET city = ?, country = ? WHERE id = ?");
+  const cache = new Map<string, { city: string; country: string }>();
+  let lookups = 0;
+  let fixed = 0;
+  for (const r of rows) {
+    const key = `${r.lat.toFixed(3)},${r.lon.toFixed(3)}`;
+    let place = cache.get(key);
+    if (!place) {
+      if (lookups >= limit) continue;
+      lookups++;
+      place = await reverse(r.lat, r.lon);
+      cache.set(key, place);
+    }
+    if (place.city !== "Unknown" && place.country !== "??") {
+      update.run(place.city, place.country, r.id);
+      fixed++;
+    }
+  }
+  return { fixed, remaining: countUnknownCheckins() };
+}

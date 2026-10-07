@@ -13,6 +13,7 @@ export default function SettingsPanel({ checkins, onChanged, flash }: { checkins
   return (
     <div className="space-y-4">
       {flash && <div className="card text-sm">{flash === "connected" ? "✅ Gmail connected. Hit “Sync now”." : `⚠️ Gmail: ${flash}`}</div>}
+      <EmailForwardingCard onChanged={onChanged} />
       <GmailCard onChanged={onChanged} />
       <ManualCheckin onChanged={onChanged} />
       <CsvImport onChanged={onChanged} />
@@ -22,6 +23,74 @@ export default function SettingsPanel({ checkins, onChanged, flash }: { checkins
         <div className="font-semibold mb-1">Backup</div>
         <a className="text-accent" href="/api/data" download="trip-recap.json">Download all data as JSON</a>
       </div>
+    </div>
+  );
+}
+
+interface InboundLog { id: number; receivedAt: string; from: string | null; subject: string | null; status: string; tripsAdded: number; detail: string | null }
+
+const STATUS: Record<string, [string, string]> = {
+  added: ["✅", "Trip added"],
+  duplicate: ["☑️", "Already logged"],
+  "no-trip": ["➖", "No trip found"],
+  unplaced: ["⚠️", "Couldn't place airports"],
+  verification: ["🔑", "Forwarding confirmation"],
+  error: ["❌", "Error"],
+};
+
+function EmailForwardingCard({ onChanged }: { onChanged: () => void }) {
+  const [data, setData] = useState<{ address: string | null; emails: InboundLog[] } | null>(null);
+  const load = () => fetch("/api/inbound-email").then((r) => r.json()).then(setData).catch(() => {});
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 15000); // pick up new emails (and the Gmail code) while you're here
+    return () => clearInterval(t);
+  }, []);
+  useEffect(() => {
+    if (data?.emails.some((e) => e.status === "added")) onChanged();
+  }, [data?.emails[0]?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Gmail's confirmation code is only useful for a little while after it arrives.
+  const verification = data?.emails.find((e) => e.status === "verification" && Date.now() - Date.parse(e.receivedAt + "Z") < 2 * 86400000);
+  const code = verification && (verification.subject?.match(/#(\d{6,})/)?.[1] ?? verification.detail?.match(/(?:code|código)\D{0,20}(\d{6,})/i)?.[1]);
+  const link = verification?.detail?.match(/https:\/\/mail(?:-settings)?\.google\.com\/\S+/)?.[0];
+
+  return (
+    <div className="card space-y-3 text-sm">
+      <div className="font-semibold">📨 Email forwarding</div>
+      <p className="text-muted">
+        Forward booking emails to {data?.address ? <b className="text-fg">{data.address}</b> : "your Trip Recap address"} (or let a Gmail filter do it) and the trips appear here, like Flighty.
+        {!data?.address && <> Set it up with <code>docs/EMAIL_FORWARDING.md</code>.</>}
+      </p>
+      {verification && (
+        <div className="rounded-xl border border-accent/40 bg-accent/10 p-3">
+          <div className="font-semibold">🔑 Gmail confirmation received</div>
+          {code ? (
+            <p className="mt-1">Code: <span className="select-all font-mono text-base text-fg">{code}</span></p>
+          ) : (
+            <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap text-xs text-muted">{verification.detail}</pre>
+          )}
+          {link && <a href={link} target="_blank" rel="noreferrer noopener" className="mt-1 block truncate text-accent">Or open the confirmation link</a>}
+        </div>
+      )}
+      {data && data.emails.length > 0 ? (
+        <ul className="divide-y divide-line">
+          {data.emails.filter((e) => e.status !== "verification").slice(0, 8).map((e) => (
+            <li key={e.id} className="py-2">
+              <div className="flex items-center gap-2">
+                <span title={STATUS[e.status]?.[1]}>{STATUS[e.status]?.[0] ?? "•"}</span>
+                <span className="min-w-0 flex-1 truncate">{e.subject || "(no subject)"}</span>
+                <span className="shrink-0 text-xs text-muted">{new Date(e.receivedAt + "Z").toLocaleDateString(undefined, { day: "numeric", month: "short" })}</span>
+              </div>
+              <div className="pl-6 text-xs text-muted">
+                {STATUS[e.status]?.[1]}{e.tripsAdded > 1 ? ` (${e.tripsAdded})` : ""}{e.detail && e.status !== "added" ? ` · ${e.detail}` : ""}
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : data ? (
+        <p className="text-xs text-muted">No emails received yet.</p>
+      ) : null}
     </div>
   );
 }

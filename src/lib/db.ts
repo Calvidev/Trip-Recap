@@ -45,6 +45,14 @@ function open(): Database.Database {
       name TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE TABLE IF NOT EXISTS inbound_emails (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      received_at TEXT NOT NULL DEFAULT (datetime('now')),
+      from_addr TEXT, subject TEXT,
+      status TEXT NOT NULL, -- added | duplicate | no-trip | unplaced | verification | error
+      trips_added INTEGER NOT NULL DEFAULT 0,
+      detail TEXT -- error message, or the body of a forwarding-confirmation email (it holds the code)
+    );
     CREATE TABLE IF NOT EXISTS auto_dismissed (external_id TEXT PRIMARY KEY);
     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS gmail_messages (

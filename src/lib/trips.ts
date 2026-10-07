@@ -178,3 +178,19 @@ export async function repairUnknownCheckins(
 export function removeBadCheckins(): number {
   return db().prepare("DELETE FROM checkins WHERE (lat = 0 AND lon = 0)").run().changes;
 }
+
+/**
+ * The same flight already logged from another source (Flighty, email, Gmail, by hand):
+ * same day and either the same flight number or the same airports.
+ */
+export function findSameFlight(p: Pick<TripPayload, "mode" | "departDate" | "flightNumber" | "origin" | "dest">): { id: number } | undefined {
+  if (p.mode !== "flight") return undefined;
+  const fn = p.flightNumber?.replace(/\s+/g, "").toUpperCase() || null;
+  return db()
+    .prepare(
+      `SELECT id FROM trips WHERE mode = 'flight' AND depart_date = ? AND source NOT LIKE 'auto%'
+         AND ((? IS NOT NULL AND flight_number = ?) OR (? IS NOT NULL AND origin_code = ? AND dest_code = ?))
+       LIMIT 1`,
+    )
+    .get(p.departDate, fn, fn, p.origin.code ?? null, p.origin.code?.toUpperCase() ?? null, p.dest.code?.toUpperCase() ?? null) as { id: number } | undefined;
+}

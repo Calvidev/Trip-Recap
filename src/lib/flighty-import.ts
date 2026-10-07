@@ -3,9 +3,9 @@ import { db } from "./db";
 import { airport } from "./airports";
 import { airlineInfo } from "./airlines";
 import { parseFlightyCsv } from "./flighty";
-import { createTrip, deleteTrip, listTrips, updateTrip, type TripPayload } from "./trips";
-import { rememberDismissed, syncAutoTrips } from "./autotrips";
-import type { Place, Trip } from "./types";
+import { createTrip, findSameFlight, updateTrip, type TripPayload } from "./trips";
+import { replaceGuessesWithRealFlights, syncAutoTrips } from "./autotrips";
+import type { Place } from "./types";
 
 export interface FlightyResult {
   added: number;
@@ -20,7 +20,6 @@ const toPlace = (code: string): Place | null => {
   const a = airport(code);
   return a ? { name: a.name, city: a.city, country: a.country, lat: a.lat, lon: a.lon, code: a.code } : null;
 };
-const dayDiff = (a: string, b: string) => Math.abs(Date.parse(a) - Date.parse(b)) / 86400000;
 
 /**
  * Imports a Flighty CSV export. Re-importing updates flights in place (matched by
@@ -67,60 +66,16 @@ export function importFlighty(text: string): FlightyResult {
       source: "flighty",
       externalId: `flighty:${f.flightyId}`,
     };
-    const existing = findByExt.get(payload.externalId) as { id: number } | undefined;
+    // Same Flighty flight imported before, or the same flight already added from an email.
+    const existing = (findByExt.get(payload.externalId) as { id: number } | undefined) ?? findSameFlight(payload);
     if (existing) {
       updateTrip(existing.id, payload);
       res.updated++;
     } else if (createTrip(payload)) res.added++;
   }
 
-  res.replaced = replaceGuesses();
+  res.replaced = replaceGuessesWithRealFlights();
   res.autoTrips = syncAutoTrips();
   return res;
 }
 
-/**
- * A guessed trip (auto or auto-edited) is replaced when real flights explain it:
- * within 3 days of it, a flight leaves its origin country and a flight (possibly
- * a later connection) lands in its destination country — e.g. the guess
- * "San Pedro → Germany" is explained by MTY→DFW, DFW→LHR, LHR→HAJ.
- * Groups survive: real trips inside a group's date span join that group.
- */
-function replaceGuesses(): number {
-  const trips = listTrips();
-  const flights = trips.filter((t) => t.source === "flighty");
-  const near = (f: Trip, g: Trip) => dayDiff(f.departDate, g.departDate) <= 3;
-
-  // Date span of every group, taken before any guess is removed.
-  const spans = new Map<number, { from: string; to: string }>();
-  for (const t of trips) {
-    if (t.groupId == null) continue;
-    const s = spans.get(t.groupId);
-    if (!s) spans.set(t.groupId, { from: t.departDate, to: t.arriveDate });
-    else {
-      if (t.departDate < s.from) s.from = t.departDate;
-      if (t.arriveDate > s.to) s.to = t.arriveDate;
-    }
-  }
-
-  // Legs that connect two flights (Hannover → Düsseldorf) are not guesses to replace.
-  const gapIds = new Set((db().prepare("SELECT id FROM trips WHERE external_id LIKE 'auto:gap:%'").all() as { id: number }[]).map((r) => r.id));
-  let n = 0;
-  for (const g of trips.filter((t) => (t.source === "auto" || t.source === "auto-edited") && !gapIds.has(t.id))) {
-    const leaves = flights.some((f) => near(f, g) && f.origin.country === g.origin.country);
-    const lands = flights.some((f) => near(f, g) && f.dest.country === g.dest.country);
-    if (!leaves || !lands) continue;
-    rememberDismissed(deleteTrip(g.id));
-    n++;
-  }
-
-  // Ungrouped real trips within a group's span (±1 day) join it.
-  const setGroup = db().prepare("UPDATE trips SET group_id = ? WHERE id = ? AND group_id IS NULL");
-  for (const [gid, s] of spans) {
-    const from = shift(s.from, -1), to = shift(s.to, 1);
-    for (const t of listTrips()) if (t.groupId == null && !t.source.startsWith("auto") && t.departDate >= from && t.departDate <= to) setGroup.run(gid, t.id);
-  }
-  return n;
-}
-
-const shift = (d: string, days: number) => new Date(Date.parse(d) + days * 86400000).toISOString().slice(0, 10);

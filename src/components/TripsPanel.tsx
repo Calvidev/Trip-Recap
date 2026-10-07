@@ -187,7 +187,7 @@ function TripRow({ t, onTap, selecting, checked, compact }: { t: Trip; onTap: (t
               {t.origin.code ?? t.origin.city} <span className="text-muted">→</span> {t.dest.code ?? t.dest.city}
             </span>
             {upcoming && <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-semibold text-accent">UPCOMING</span>}
-            {t.source === "gmail" && <span className="text-[10px] text-muted">via Gmail</span>}
+            {(t.source === "gmail" || t.source === "email") && <span className="text-[10px] text-muted">via email</span>}
             {t.source === "auto" && <span className="rounded-full bg-drive/15 px-2 py-0.5 text-[10px] font-semibold text-drive">AUTO</span>}
           </div>
           {!compact && (

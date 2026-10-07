@@ -25,6 +25,9 @@ and ferries, and it counts **how many days and nights you spent in every country
   updates flights in place. Real flights replace the trips guessed from check-ins and keep their groups.
   Ground legs between flights that don't connect (e.g. Hannover → Düsseldorf) are added as guesses you can edit.
   Where your flights already place you, they beat country-only check-ins.
+- 📨 **Email forwarding** (like Flighty): forward booking emails to e.g. trips@calvi.dev, by hand or with a
+  Gmail filter. A Cloudflare Email Worker hands them to the app. It reads airline markup, or uses Claude for the text
+  and PDF e-tickets, and skips flights you already have. See [docs/EMAIL_FORWARDING.md](docs/EMAIL_FORWARDING.md).
 - 📧 **Gmail import.** It reads airline and rail booking emails through their schema.org markup.
   It can also use Claude for emails that don't have that markup.
 - 📊 **Stats**: distance, time in the air, airports, airlines, top routes.

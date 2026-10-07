@@ -1,0 +1,8 @@
+# Optional: deploy with `npx wrangler deploy` instead of pasting worker.js in the dashboard.
+# Then: npx wrangler secret put APP_TOKEN
+name = "trip-recap-inbound"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+TRIP_RECAP_URL = "https://trips.calvi.dev"

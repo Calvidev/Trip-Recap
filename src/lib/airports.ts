@@ -58,3 +58,20 @@ export function nearestAirport(lat: number, lon: number): Airport | null {
   }
   return airport(best);
 }
+
+const fold = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+
+/** Offline city → coordinates, using the airports of that city (biggest first). */
+export function cityAirport(city: string, country: string): Airport | null {
+  const c = fold(city);
+  const cc = country.toUpperCase();
+  let best: string | null = null;
+  let bestScore = -1;
+  for (const code in AIRPORTS) {
+    const r = AIRPORTS[code];
+    if (r[2] !== cc || fold(r[1]) !== c) continue;
+    const score = (HUBS.has(code) ? 2 : 0) + (/international/i.test(r[0]) ? 1 : 0);
+    if (score > bestScore) { bestScore = score; best = code; }
+  }
+  return airport(best);
+}

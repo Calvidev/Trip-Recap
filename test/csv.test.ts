@@ -17,13 +17,19 @@ test("parses the n8n ubicaciones.csv format", () => {
   const { rows, skipped } = parseLocationCsv(csv);
   assert.equal(skipped, 1); // header
   assert.equal(rows.length, 2);
-  assert.deepEqual(rows[0], { date: "2026-06-06", time: null, lat: 25.4383093876729, lon: -100.142386678156, city: "Santiago", country: "MX", source: "import" });
+  assert.deepEqual(rows[0], { date: "2026-06-06", time: null, lat: 25.4383093876729, lon: -100.142386678156, city: "Santiago", country: "MX", countryName: "México", source: "import" });
   assert.equal(rows[1].city, "San Pedro Garza García");
   assert.match(rows[1].date, /^2026-10-0[67]$/); // depends on the test machine's time zone
 });
 
-test("rows without coordinates are skipped, not imported as 0,0", () => {
-  const { rows, skipped } = parseLocationCsv(["2026-02-01,,,,,,", "2026-02-02,0,0,Unknown,,,", "2026-02-03,25.62,-100.35,Monterrey,México,MX,x"].join("\n"));
-  assert.equal(rows.length, 1);
+test("rows without coordinates: kept if they name a city, otherwise skipped (never 0,0)", () => {
+  const { rows, skipped } = parseLocationCsv([
+    "2026-02-01,,,,,,",
+    "2026-02-02,0,0,Unknown,,,",
+    "2026-02-03,25.62,-100.35,Monterrey,México,MX,x",
+    "2026-02-04,,,Berlín,Alemania,DE,",
+    "2026-02-05,0,0,Estambul,Turquía,,",
+  ].join("\n"));
   assert.equal(skipped, 2);
+  assert.deepEqual(rows.map((r) => [r.city, r.country, r.lat]), [["Monterrey", "MX", 25.62], ["Berlín", "DE", null], ["Estambul", "??", null]]);
 });

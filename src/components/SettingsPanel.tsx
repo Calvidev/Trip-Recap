@@ -110,15 +110,12 @@ function CsvImport({ onChanged }: { onChanged: () => void }) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    const { rows, skipped } = parseLocationCsv(await file.text());
+    const text = await file.text();
+    const { rows } = parseLocationCsv(text);
     if (!rows.length) return setMsg("No rows found. Expected: date,lat,lon,city,country,countryCode,…");
-    setMsg(`Importing ${rows.length} locations…`);
-    const r = await fetch("/api/checkins/import", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(rows),
-    }).then((r) => r.json());
-    setMsg(r.error ? "⚠️ Import failed." : `Added ${r.added} locations${r.duplicates ? `, ${r.duplicates} already there` : ""}${skipped ? `, ${skipped} lines skipped` : ""}.${r.autoTrips?.added ? ` Detected ${r.autoTrips.added} trips.` : ""}`);
+    setMsg(`Importing ${rows.length} locations… (cities without coordinates are looked up, this can take a minute)`);
+    const r = await fetch("/api/checkins/import", { method: "POST", headers: { "Content-Type": "text/csv" }, body: text }).then((r) => r.json());
+    setMsg(r.error ? "⚠️ Import failed." : `Added ${r.added} locations${r.duplicates ? `, ${r.duplicates} already there` : ""}${r.skipped ? `, ${r.skipped} lines skipped` : ""}.${r.autoTrips?.added ? ` Detected ${r.autoTrips.added} trips.` : ""}`);
     onChanged();
   }
   return (

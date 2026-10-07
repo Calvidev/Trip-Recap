@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseLocationCsv } from "@/lib/csv";
+import { resolveRows } from "@/lib/locate";
 import { importCheckins } from "@/lib/trips";
 import { syncAutoTrips } from "@/lib/autotrips";
 
@@ -21,11 +22,14 @@ const Row = z.object({
  *      curl -X POST --data-binary @ubicaciones.csv -H "Content-Type: text/csv" \
  *        -H "Authorization: Bearer $APP_TOKEN" http://localhost:3100/api/checkins/import
  */
+export const maxDuration = 300;
+
 export async function POST(req: Request) {
   if (req.headers.get("content-type")?.startsWith("text/")) {
-    const { rows, skipped } = parseLocationCsv(await req.text());
+    const parsed = parseLocationCsv(await req.text());
+    const { rows, unresolved } = await resolveRows(parsed.rows);
     const result = importCheckins(rows);
-    return NextResponse.json({ ...result, skipped, autoTrips: syncAutoTrips() });
+    return NextResponse.json({ ...result, skipped: parsed.skipped + unresolved, autoTrips: syncAutoTrips() });
   }
   const parsed = z.array(Row).max(50000).safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues.slice(0, 5) }, { status: 400 });

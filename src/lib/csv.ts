@@ -26,23 +26,32 @@ export function isValidCoord(lat: number, lon: number): boolean {
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
+/** A parsed row; coordinates may be missing when the row still names a city. */
+export type LocationRow = Omit<Checkin, "id" | "lat" | "lon"> & { lat: number | null; lon: number | null; countryName: string };
+
+const hasPlace = (city: string, cc: string, name: string) =>
+  Boolean(city) && city !== "Unknown" && (/^[A-Za-z]{2}$/.test(cc) || Boolean(name));
+
 /**
  * Parses a location log like the n8n "Tracker de Ubicación" CSV:
  *   date,lat,lon,city,countryName,countryCode,address
  * `date` may be YYYY-MM-DD or a full ISO timestamp; timestamps are converted to
- * the local date/time of the machine doing the import (your browser).
- * Rows that don't start with a date + coordinates (e.g. a header) are skipped.
+ * the local date/time of the machine doing the import.
+ * Rows without usable coordinates are kept (lat/lon = null) if they still name a
+ * city, so the server can look that city up; rows with neither are skipped.
  */
-export function parseLocationCsv(text: string): { rows: Omit<Checkin, "id">[]; skipped: number } {
-  const rows: Omit<Checkin, "id">[] = [];
+export function parseLocationCsv(text: string): { rows: LocationRow[]; skipped: number } {
+  const rows: LocationRow[] = [];
   let skipped = 0;
   for (const raw of text.split(/\r?\n/)) {
     if (!raw.trim()) continue;
-    const [d, la, lo, city, , cc] = splitCsvLine(raw);
+    const [d, la, lo, cityRaw = "", nameRaw = "", ccRaw = ""] = splitCsvLine(raw);
+    const city = cityRaw.trim(), name = nameRaw.trim(), cc = ccRaw.trim();
     // Note Number("") === 0: a row with no coordinates must not become 0,0 (off West Africa).
     const lat = la ? Number(la) : NaN, lon = lo ? Number(lo) : NaN;
+    const coordsOk = isValidCoord(lat, lon);
     const m = d?.match(/^(\d{4}-\d{2}-\d{2})(T.*)?$/);
-    if (!m || !isValidCoord(lat, lon)) {
+    if (!m || (!coordsOk && !hasPlace(city, cc, name))) {
       skipped++;
       continue;
     }
@@ -56,9 +65,12 @@ export function parseLocationCsv(text: string): { rows: Omit<Checkin, "id">[]; s
       }
     }
     rows.push({
-      date, time, lat, lon,
+      date, time,
+      lat: coordsOk ? lat : null,
+      lon: coordsOk ? lon : null,
       city: city || "Unknown",
-      country: /^[A-Za-z]{2}$/.test(cc ?? "") ? cc!.toUpperCase() : "??",
+      country: /^[A-Za-z]{2}$/.test(cc) ? cc.toUpperCase() : "??",
+      countryName: name,
       source: "import",
     });
   }

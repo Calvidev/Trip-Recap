@@ -3,8 +3,9 @@
 A self-hosted, Flighty-style travel log. It tracks flights plus trains, drives, buses
 and ferries, and it counts **how many days and nights you spent in every country and city**.
 
-- 🗺️ **Map** of every trip: great-circle arcs for flights, dashed lines for trains and
-  dotted lines for drives. City dots are sized by the nights you spent there.
+- 🗺️ **3D globe map** (MapLibre) of every trip: glowing great-circle arcs for flights and dashed lines for ground
+  trips. City dots are sized by nights. It switches to a flat map with one tap. A built-in world outline means the globe
+  works even if the online map tiles can't load.
 - ➕ **Add trips by hand.** Airport search runs on a built-in IATA database (~7,900 airports).
   Train, drive, bus and ferry stops are searched on OpenStreetMap.
 - 📅 **Days per country and city**, filterable by year. It also shows a list of your stays and a
@@ -43,7 +44,7 @@ The logic is in `src/lib/stays.ts`, with tests in `test/stays.test.ts`.
 
 ## Why not Google Maps?
 
-You don't need it. The map is Leaflet with free Esri dark-canvas tiles (OpenStreetMap as fallback).
+You don't need it. The map is MapLibre with free OpenFreeMap vector tiles on top of a built-in Natural Earth world outline.
 Place search and reverse geocoding use OpenStreetMap Nominatim, and airports come from a bundled
 dataset. So there's no API key, no billing account and no quota to manage.
 

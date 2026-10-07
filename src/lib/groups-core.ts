@@ -52,7 +52,9 @@ export function suggestGroups(trips: Trip[], home: Home, today: string): Suggest
 
 function nameFor(legs: Trip[], home: Home): string {
   const month = new Date(`${legs[0].departDate}T12:00:00Z`).toLocaleDateString("en", { month: "short", year: "numeric", timeZone: "UTC" });
-  const abroad = [...new Set(legs.map((t) => t.dest.country).filter((c) => c !== home.country))];
+  // Countries where you only changed planes (left again the same day) don't name the trip.
+  const stayed = legs.filter((t, i) => i === legs.length - 1 || legs[i + 1].departDate > t.arriveDate);
+  const abroad = [...new Set(stayed.map((t) => t.dest.country).filter((c) => c !== home.country))];
   const places = abroad.length
     ? abroad.map(countryName)
     : [...new Set(legs.map((t) => t.dest.city).filter((c) => c.toLowerCase() !== home.city.toLowerCase()))];

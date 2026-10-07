@@ -21,5 +21,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!login|api/login|_next/|favicon.ico|manifest.webmanifest|icon).*)"],
+  matcher: ["/((?!login|api/login|_next/|favicon.ico|manifest.webmanifest|icon|maplibre-gl-worker.mjs|world-).*)"],
 };

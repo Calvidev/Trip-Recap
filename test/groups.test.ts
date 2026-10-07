@@ -40,3 +40,9 @@ test("an ongoing journey (not back yet) is still grouped", () => {
   const trips = [T(SPGG, DE, "2026-09-01"), T(DE, TR, "2026-09-05")];
   assert.equal(suggestGroups(trips, home, "2026-10-07")[0].tripIds.length, 2);
 });
+
+test("connection countries (same-day layovers) don't name the group", () => {
+  const DFW = P("Dallas", "US", 32.9, -97.04);
+  const trips = [T(SPGG, DFW, "2026-03-20"), T(DFW, DE, "2026-03-20"), T(DE, SPGG, "2026-03-30")];
+  assert.equal(suggestGroups(trips, home, "2026-10-07")[0].name, "Germany · Mar 2026");
+});

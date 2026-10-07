@@ -110,3 +110,20 @@ export function addCheckin(c: Omit<Checkin, "id">): Checkin {
 export function deleteCheckin(id: number) {
   db().prepare("DELETE FROM checkins WHERE id = ?").run(id);
 }
+
+/** Bulk insert, skipping rows that duplicate an existing check-in (same date and place). */
+export function importCheckins(rows: Omit<Checkin, "id">[]): { added: number; duplicates: number } {
+  const exists = db().prepare("SELECT 1 FROM checkins WHERE date = ? AND abs(lat - ?) < 0.001 AND abs(lon - ?) < 0.001");
+  const insert = db().prepare(
+    "INSERT INTO checkins (date, time, lat, lon, city, country, source) VALUES (@date, @time, @lat, @lon, @city, @country, @source)",
+  );
+  let added = 0;
+  db().transaction(() => {
+    for (const r of rows) {
+      if (exists.get(r.date, r.lat, r.lon)) continue;
+      insert.run(r);
+      added++;
+    }
+  })();
+  return { added, duplicates: rows.length - added };
+}

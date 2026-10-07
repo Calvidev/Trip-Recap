@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import PlaceInput from "./PlaceInput";
 import { fmtDate, localToday } from "@/lib/format";
 import { countryName, flagEmoji } from "@/lib/geo";
+import { parseLocationCsv } from "@/lib/csv";
 import type { Checkin, Place } from "@/lib/types";
 
 interface GmailStatus { configured: boolean; connected: boolean; lastSync: string | null; claude: boolean }
@@ -13,6 +14,7 @@ export default function SettingsPanel({ checkins, onChanged, flash }: { checkins
       {flash && <div className="card text-sm">{flash === "connected" ? "✅ Gmail connected. Hit “Sync now”." : `⚠️ Gmail: ${flash}`}</div>}
       <GmailCard onChanged={onChanged} />
       <ManualCheckin onChanged={onChanged} />
+      <CsvImport onChanged={onChanged} />
       <ShortcutCard />
       <CheckinList checkins={checkins} onChanged={onChanged} />
       <div className="card text-sm">
@@ -98,6 +100,38 @@ function ManualCheckin({ onChanged }: { onChanged: () => void }) {
         <input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} />
         <button onClick={save} disabled={!place || saving} className="btn-primary">Add</button>
       </div>
+    </div>
+  );
+}
+
+function CsvImport({ onChanged }: { onChanged: () => void }) {
+  const [msg, setMsg] = useState("");
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    const { rows, skipped } = parseLocationCsv(await file.text());
+    if (!rows.length) return setMsg("No rows found. Expected: date,lat,lon,city,country,countryCode,…");
+    setMsg(`Importing ${rows.length} locations…`);
+    const r = await fetch("/api/checkins/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(rows),
+    }).then((r) => r.json());
+    setMsg(r.error ? "⚠️ Import failed." : `Added ${r.added} locations${r.duplicates ? `, ${r.duplicates} already there` : ""}${skipped ? `, ${skipped} lines skipped` : ""}.`);
+    onChanged();
+  }
+  return (
+    <div className="card space-y-2 text-sm">
+      <div className="font-semibold">🗂️ Import location history</div>
+      <p className="text-muted">
+        Upload a CSV with one location per line: <code className="text-fg">date,lat,lon,city,country,countryCode</code> (extra columns are ignored). Works with the n8n <code className="text-fg">ubicaciones.csv</code>. Re-importing the same file won&apos;t create duplicates.
+      </p>
+      <label className="btn-ghost w-full cursor-pointer">
+        Choose CSV file
+        <input type="file" accept=".csv,text/csv,text/plain" className="hidden" onChange={onFile} />
+      </label>
+      {msg && <p className="text-muted">{msg}</p>}
     </div>
   );
 }
